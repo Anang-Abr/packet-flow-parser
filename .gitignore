@@ -1,3 +1,4 @@
 *.json
 *.pcap
 *.txt
+/captured_packets

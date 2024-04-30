@@ -152,8 +152,9 @@ void tcp_handler(const struct pcap_pkthdr *pkthdr, const unsigned char *packet){
             flows[flow_count].flow_FIN_flag_count = 0;
             flows[flow_count].flow_RST_flag_count = 0;
             flows[flow_count].flow_SYN_flag_count = 0;
-            flows[flow_count].pkt_array[flows[flow_count].packet_count] = pkthdr->len - sizeof(struct ethhdr);
-            printf("array item: %d\n", (pkthdr->len - 54));
+            flows[flow_count].pkt_array[flows[flow_count].packet_count-1] = pkthdr->len - sizeof(struct ethhdr);
+            printf("packet ke- %d\n", flows[flow_count].packet_count);
+            printf("array item: %ld\n", (pkthdr->len - sizeof(struct ethhdr)));
             switch (tcp_header->th_flags)
             {
             case 0x01:
@@ -203,7 +204,8 @@ void tcp_handler(const struct pcap_pkthdr *pkthdr, const unsigned char *packet){
         flows[flow_index].ts_last = pkthdr->ts.tv_sec;
         flows[flow_index].tms_last = pkthdr->ts.tv_usec;
         flows[flow_index].tms_start = flows[flow_index].tms_start;
-        flows[flow_index].pkt_array[flows[flow_count].packet_count] = pkthdr->len - sizeof(struct ethhdr);
+        flows[flow_index].pkt_array[flows[flow_index].packet_count-1] = pkthdr->len - sizeof(struct ethhdr);
+        printf("packet ke- %d\n", flows[flow_index].packet_count);
         printf("array item: %ld\n", (pkthdr->len - sizeof(struct ethhdr)));
         switch (tcp_header->th_flags)
         {
@@ -248,6 +250,30 @@ void tcp_handler(const struct pcap_pkthdr *pkthdr, const unsigned char *packet){
             flows[flow_index].bwd_tot++;
         }
     }
+    return;
+}
+
+void print_flow_info(int index){
+    printf("Index %d:\n", index);
+    printf("Flow %d:\n", index + 1);
+    printf("Source IP: %s\n", inet_ntoa(flows[index].src_ip));
+    printf("Destination IP: %s\n", inet_ntoa(flows[index].dst_ip));
+    printf("Port Numbers: %d, %d\n", flows[index].src_port, flows[index].dst_port);
+    printf("Packet Count: %d\n", flows[index].packet_count);
+    printf("Protocol: %c\n", flows[index].protocol);
+    printf("Timestamp(sec) start: %ld\n", flows[index].ts_start);
+    printf("Timestamp(sec) last : %ld\n", flows[index].ts_last);
+    printf("Timestamp(ms) start: %ld\n", flows[index].tms_start);
+    printf("Timestamp(ms) last : %ld\n", flows[index].tms_last);
+    printf("Forward :%d\n", flows[index].fwd_tot);
+    printf("Bacward :%d\n", flows[index].bwd_tot);
+    printf("packet count : %d\n", flows[index].packet_count);
+    printf("array: [");
+    for (int j = 0; j < sizeof(flows[index].pkt_array) / sizeof(int); j++)
+    {
+        printf("%d,",flows[index].pkt_array[j]);
+    }
+    printf("]\n");
     return;
 }
 
@@ -327,7 +353,7 @@ void packet_handler(unsigned char *user_data, const struct pcap_pkthdr *pkthdr, 
     //PROTOCOL UDP
     else if (ip_header->ip_p == IPPROTO_UDP)
     {
-        udp_handler(pkthdr, packet);
+        // udp_handler(pkthdr, packet);
     }
     packet_count++;
     printf("\n");
@@ -384,19 +410,9 @@ int main(int argc, char **argv)
     // Print flow information
     for (int i = 0; i < flow_count; i++)
     {
+        print_flow_info(i);
         cJSON *tempJson = cJSON_CreateObject();
-        printf("Flow %d:\n", i + 1);
-        printf("Source IP: %s\n", inet_ntoa(flows[i].src_ip));
-        printf("Destination IP: %s\n", inet_ntoa(flows[i].dst_ip));
-        printf("Port Numbers: %d, %d\n", flows[i].src_port, flows[i].dst_port);
-        printf("Packet Count: %d\n", flows[i].packet_count);
-        printf("Protocol: %c\n", flows[i].protocol);
-        printf("Timestamp(sec) start: %ld\n", flows[i].ts_start);
-        printf("Timestamp(sec) last : %ld\n", flows[i].ts_last);
-        printf("Timestamp(ms) start: %ld\n", flows[i].tms_start);
-        printf("Timestamp(ms) last : %ld\n", flows[i].tms_last);
-        printf("Forward %d:\n", flows[i].fwd_tot);
-        printf("Bacward %d:\n", flows[i].bwd_tot);
+        cJSON *tempArr = cJSON_CreateArray();
         cJSON_AddStringToObject(tempJson, "src_ip", inet_ntoa(flows[i].src_ip));
         cJSON_AddStringToObject(tempJson, "dst_ip", inet_ntoa(flows[i].dst_ip));
         cJSON_AddNumberToObject(tempJson, "src_port", flows[i].src_port);
@@ -409,7 +425,11 @@ int main(int argc, char **argv)
         cJSON_AddNumberToObject(tempJson, "tms_last", flows[i].tms_last);
         cJSON_AddNumberToObject(tempJson, "fwd_tot", flows[i].fwd_tot);
         cJSON_AddNumberToObject(tempJson, "bwd_tot", flows[i].bwd_tot);
-        // cJSON_AddArrayToObject(tempJson, "pkt_array", flows);
+        for (int j = 0; j < sizeof(flows[i].pkt_array)/sizeof(int); j++)
+        {
+            cJSON_AddItemToArray(tempArr, cJSON_CreateNumber(flows[i].pkt_array[j]));
+        }
+        cJSON_AddItemToObject(tempJson, "payload_size_arr", tempArr);
         cJSON_AddItemToArray(flowArr, tempJson);
         printf("flow array: %s", cJSON_Print(tempJson));
         printf("\n");
@@ -417,8 +437,11 @@ int main(int argc, char **argv)
 
 
     printf("flow array: %s\n", cJSON_Print(flowArr));
-    strftime(s, sizeof(s), "%Y-%m-%d_%H-%M-%S.json", tm);
+    strftime(s, sizeof(s), "captured_packets/%Y-%m-%d_%H-%M-%S.json", tm);
     FILE *fp = fopen(s, "w");
+    if(fp == NULL){
+        printf("can't create file");
+    }
     fputs(cJSON_Print(flowArr), fp);
     cJSON_Delete(flowArr);
     fclose;
