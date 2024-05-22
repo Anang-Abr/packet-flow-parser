@@ -2,3 +2,4 @@
 *.pcap
 *.txt
 /captured_packets
+/sandbox

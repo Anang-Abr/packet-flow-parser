@@ -1,57 +1,30 @@
 #include <stdio.h>
+#include <stdbool.h>
 #include <pcap.h>
 #include <netinet/ip.h>
 #include <netinet/ether.h>
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
 #include <arpa/inet.h>
-#include "cJSON.h"
-#include "cJSON.c"
+#include "utils/cJSON.h"
+#include "utils/cJSON.c"
 #include <time.h>
 #include <assert.h>
+#include "flow.h"
 
-#define MAX_FLOWS 50
-#define MAX_PACKETS 50
+#define F_FIN 0x01
+#define F_SYN 0x02
+#define F_RST 0x04
+#define F_PSH 0x08
+#define F_ACK 0x10
+#define F_URG 0x20
+#define F_ECE 0x40
+#define F_CWR 0x80
 
 
-typedef struct
-{
-    struct in_addr src_ip;
-    struct in_addr dst_ip;
-    uint16_t src_port;
-    uint16_t dst_port;
-    int packet_count;
-    char protocol;
-    time_t ts_start;
-    time_t ts_last;
-    time_t tms_start;
-    time_t tms_last;
-    int fwd_tot;
-    int bwd_tot;
-    int flow_FIN_flag_count;
-    int flow_SYN_flag_count;
-    int flow_RST_flag_count;
-    int bwd_PSH_flag_count;
-    int fwd_PSH_flag_count;
-    int flow_ACK_flag_count;
-    int flow_CWR_flag_count;
-    int flow_ECE_flag_count;
-    int fwd_URG_flag_count;
-    int bwd_URG_flag_count;
-    int fwd_pkts_payload_min;
-    int fwd_pkts_payload_max;
-    int fwd_pkts_payload_tot;
-    int fwd_pkts_payload_std;
-    int bwd_pkts_payload_min;
-    int bwd_pkts_payload_max;
-    int bwd_pkts_payload_tot;
-    int bwd_pkts_payload_std;
-    int flow_pkts_payload_min;
-    int flow_pkts_payload_max;
-    int flow_pkts_payload_tot;
-    int flow_pkts_payload_std;
-    int pkt_array[50];
-} FlowInfo;
+#define MAX_FLOWS 10
+#define MAX_PACKETS 30
+
 
 FlowInfo flows[MAX_FLOWS];
 int flow_count = 0;
@@ -59,6 +32,7 @@ int packet_count = 0;
 char protocol = 'O';
 int tcp_flow = 0;
 int udp_flow = 0;
+int TEMP_ARR_SIZE = 10;
 pcap_dumper_t *pcap_dumper;
 
 void process_packet(const u_char *packet, int payload_offset, int payload_length)
@@ -95,270 +69,295 @@ int find_flow_index(
     return -1;
 }
 
-void tcp_handler(const struct pcap_pkthdr *pkthdr, const unsigned char *packet){
-    const struct ip *ip_header = (struct ip *)(packet + sizeof(struct ethhdr));
-    const struct ethhdr *eth_header = (struct ethhdr *)packet;
-    const struct tcphdr *tcp_header = (struct tcphdr *)(packet + sizeof(struct ethhdr) + ip_header->ip_hl * 4);
-    char src_ip[INET_ADDRSTRLEN];
-    char dst_ip[INET_ADDRSTRLEN];
-    printf("Packet captured\n");
-    printf("Packet length: %d\n", pkthdr->len);
-    printf("pkthdr length: %ld\n", sizeof(struct pcap_pkthdr));
-    printf("Payload size pcap_pkthdr: %ld\n", pkthdr->len - sizeof(struct pcap_pkthdr));
-    printf("Payload size ethhdr: %ld\n", pkthdr->len - sizeof(struct ethhdr));
-    printf("Payload size ip_header: %ld\n", pkthdr->len - sizeof(ip_header));
-    printf("Payload size ip_header: %ld\n", pkthdr->len - (sizeof(ip_header) + sizeof(struct ethhdr) + sizeof(struct pcap_pkthdr) + sizeof(struct tcphdr)));
-    inet_ntop(AF_INET, &(ip_header->ip_src), src_ip, INET_ADDRSTRLEN);
-    inet_ntop(AF_INET, &(ip_header->ip_dst), dst_ip, INET_ADDRSTRLEN);
-    char *src_eth = ether_ntoa((const struct ether_addr *)eth_header->h_source);
-    char *dst_eth = ether_ntoa((const struct ether_addr *)eth_header->h_dest);
-    printf("Source Host: %s\n", src_eth);
-    printf("Destination Host: %s\n", dst_eth);
-    printf("Layer 2 protocol: %d\n", eth_header->h_proto);
-    printf("Source IP: %s\n", src_ip);
-    printf("Destination Ip: %s\n", dst_ip);
-    printf("TTL : %d\n", ip_header->ip_ttl);
-    printf("TOS: %d\n", ip_header->ip_tos);
-
-    printf("Payload size ip_header: %ld\n", pkthdr->len - (sizeof(struct ip) + sizeof(struct ethhdr) + sizeof(struct pcap_pkthdr) + sizeof(struct tcphdr)));
-    printf("Source Port: %d\n", ntohs(tcp_header->th_sport));
-    printf("Destination Port: %d\n", ntohs(tcp_header->th_dport));
-    printf("TCP Flags: 0x%X\n", tcp_header->th_flags);
-    printf("TCP Window: %02X\n", tcp_header->th_win);
-    printf("TCP checksum:%02X\n", tcp_header->th_sum);
-    printf("TCP urgent pointer: %02X\n", tcp_header->th_urp);
-    printf("Protocol: TCP\n");
-    int flow_index = find_flow_index(ip_header->ip_src, ip_header->ip_dst, ntohs(tcp_header->th_sport), ntohs(tcp_header->th_dport));
-    // new flow generated
-    if (flow_index == -1)
-    {
-        if (flow_count < MAX_FLOWS)
-        {
-            flows[flow_count].src_ip = ip_header->ip_src;
-            flows[flow_count].dst_ip = ip_header->ip_dst;
-            flows[flow_count].src_port = ntohs(tcp_header->th_sport);
-            flows[flow_count].dst_port = ntohs(tcp_header->th_dport);
-            flows[flow_count].packet_count = 1;
-            flows[flow_count].protocol = 'T';
-            flows[flow_count].ts_start = pkthdr->ts.tv_sec;
-            flows[flow_count].ts_last = pkthdr->ts.tv_sec;
-            flows[flow_count].tms_start = pkthdr->ts.tv_usec;
-            flows[flow_count].tms_last = pkthdr->ts.tv_usec;
-            flows[flow_count].fwd_tot = 1;
-            flows[flow_count].bwd_tot = 0;
-            flows[flow_count].flow_ACK_flag_count = 0;
-            flows[flow_count].flow_CWR_flag_count = 0;
-            flows[flow_count].flow_ECE_flag_count = 0;
-            flows[flow_count].flow_FIN_flag_count = 0;
-            flows[flow_count].flow_RST_flag_count = 0;
-            flows[flow_count].flow_SYN_flag_count = 0;
-            flows[flow_count].pkt_array[flows[flow_count].packet_count-1] = pkthdr->len - sizeof(struct ethhdr);
-            printf("packet ke- %d\n", flows[flow_count].packet_count);
-            printf("array item: %ld\n", (pkthdr->len - sizeof(struct ethhdr)));
-            switch (tcp_header->th_flags)
-            {
-            case 0x01:
-                printf("FIN");
-                break;
-            case 0x02:
-                printf("SYN");
-                break;
-            case 0x04:
-                printf("RST");
-                break;
-            case 0x08:
-                printf("PSH");
-                break;
-            case 0x10:
-                printf("ACK");
-                break;
-            case 0x20:
-                printf("URG");
-                break;
-            case 0x40:
-                printf("ECE");
-                break;
-            case 0x80:
-                printf("CWR");
-                break;
-            case 0x11:
-                printf("ACKFIN");
-                break;
-            default:
-                printf("DEFAULT:%X", tcp_header->th_flags);
-                break;
-            }
-            printf("timestamp masuknya flow: %ld\n", pkthdr->ts.tv_usec);
-            flow_count++;
-        }
-        else
-        {
-            printf("Max flow count reached. Cannot add a new flow.\n");
-        }
-    }
-
-    // update found flow
-    else
-    {
-        flows[flow_index].packet_count++;
-        flows[flow_index].ts_last = pkthdr->ts.tv_sec;
-        flows[flow_index].tms_last = pkthdr->ts.tv_usec;
-        flows[flow_index].tms_start = flows[flow_index].tms_start;
-        flows[flow_index].pkt_array[flows[flow_index].packet_count-1] = pkthdr->len - sizeof(struct ethhdr);
-        printf("packet ke- %d\n", flows[flow_index].packet_count);
-        printf("array item: %ld\n", (pkthdr->len - sizeof(struct ethhdr)));
-        switch (tcp_header->th_flags)
-        {
-        case 0x01:
-            printf("FIN");
-            break;
-        case 0x02:
-            printf("SYN");
-            break;
-        case 0x04:
-            printf("RST");
-            break;
-        case 0x08:
-            printf("PSH");
-            break;
-        case 0x10:
-            printf("ACK");
-            break;
-        case 0x20:
-            printf("URG");
-            break;
-        case 0x40:
-            printf("ECE");
-            break;
-        case 0x80:
-            printf("CWR");
-            break;
-        case 0x11:
-            printf("ACKFIN");
-            break;
-        default:
-            printf("DEFAULT:%X", tcp_header->th_flags);
-            break;
-        }
-        // categorize between forward and backward packet
-        if (flows[flow_index].src_ip.s_addr == ip_header->ip_src.s_addr)
-        {
-            flows[flow_index].fwd_tot++;
-        }
-        else
-        {
-            flows[flow_index].bwd_tot++;
-        }
-    }
-    return;
-}
-
-void print_flow_info(int index){
-    printf("Index %d:\n", index);
-    printf("Flow %d:\n", index + 1);
-    printf("Source IP: %s\n", inet_ntoa(flows[index].src_ip));
-    printf("Destination IP: %s\n", inet_ntoa(flows[index].dst_ip));
-    printf("Port Numbers: %d, %d\n", flows[index].src_port, flows[index].dst_port);
-    printf("Packet Count: %d\n", flows[index].packet_count);
-    printf("Protocol: %c\n", flows[index].protocol);
-    printf("Timestamp(sec) start: %ld\n", flows[index].ts_start);
-    printf("Timestamp(sec) last : %ld\n", flows[index].ts_last);
-    printf("Timestamp(ms) start: %ld\n", flows[index].tms_start);
-    printf("Timestamp(ms) last : %ld\n", flows[index].tms_last);
-    printf("Forward :%d\n", flows[index].fwd_tot);
-    printf("Bacward :%d\n", flows[index].bwd_tot);
-    printf("packet count : %d\n", flows[index].packet_count);
-    printf("array: [");
-    for (int j = 0; j < sizeof(flows[index].pkt_array) / sizeof(int); j++)
-    {
-        printf("%d,",flows[index].pkt_array[j]);
-    }
-    printf("]\n");
-    return;
-}
-
-void udp_handler(const struct pcap_pkthdr *pkthdr, const unsigned char *packet){
-    const struct ethhdr *eth_header = (struct ethhdr *)packet;
-    const struct ip *ip_header = (struct ip *)(packet + sizeof(struct ethhdr));
-    char src_ip[INET_ADDRSTRLEN];
-    char dst_ip[INET_ADDRSTRLEN];
-    printf("Packet captured\n");
-    printf("Packet length: %d\n", pkthdr->len);
-    printf("pkthdr length: %ld\n", sizeof(struct pcap_pkthdr));
-    printf("Payload size pcap_pkthdr: %ld\n", pkthdr->len - sizeof(struct pcap_pkthdr));
-    printf("Payload size ethhdr: %ld\n", pkthdr->len - sizeof(struct ethhdr));
-    printf("Payload size ip_header: %ld\n", pkthdr->len - sizeof(ip_header));
-    printf("Payload size ip_header: %ld\n", pkthdr->len - (sizeof(ip_header) + sizeof(struct ethhdr) + sizeof(struct pcap_pkthdr) + sizeof(struct tcphdr)));
-    inet_ntop(AF_INET, &(ip_header->ip_src), src_ip, INET_ADDRSTRLEN);
-    inet_ntop(AF_INET, &(ip_header->ip_dst), dst_ip, INET_ADDRSTRLEN);
-    char *src_eth = ether_ntoa((const struct ether_addr *)eth_header->h_source);
-    char *dst_eth = ether_ntoa((const struct ether_addr *)eth_header->h_dest);
-    printf("Source Host: %s\n", src_eth);
-    printf("Destination Host: %s\n", dst_eth);
-    printf("Layer 2 protocol: %d\n", eth_header->h_proto);
-    printf("Source IP: %s\n", src_ip);
-    printf("Destination Ip: %s\n", dst_ip);
-    printf("TTL : %d\n", ip_header->ip_ttl);
-    printf("TOS: %d\n", ip_header->ip_tos);
-    const struct udphdr *udp_header = (struct udphdr *)(packet + sizeof(struct ethhdr) + ip_header->ip_hl * 4);
-    printf("Source Port: %d\n", ntohs(udp_header->uh_sport));
-    printf("Destination Port: %d\n", ntohs(udp_header->uh_dport));
-    printf("Protocol: UDP\n");
-    int flow_index = find_flow_index(ip_header->ip_src, ip_header->ip_dst, ntohs(udp_header->uh_sport), ntohs(udp_header->uh_dport));
-    // membuat flow baru
-    if (flow_index == -1)
-    {
-        if (flow_count < MAX_FLOWS)
-        {
-            flows[flow_count].src_ip = ip_header->ip_src;
-            flows[flow_count].dst_ip = ip_header->ip_dst;
-            flows[flow_count].src_port = ntohs(udp_header->uh_sport);
-            flows[flow_count].dst_port = ntohs(udp_header->uh_dport);
-            flows[flow_count].packet_count = 1;
-            flows[flow_count].protocol = 'U';
-            flows[flow_count].ts_start = pkthdr->ts.tv_sec;
-            flows[flow_count].ts_last = pkthdr->ts.tv_sec;
-            flows[flow_count].tms_start = pkthdr->ts.tv_usec;
-            flows[flow_count].tms_last = pkthdr->ts.tv_usec;
-            flows[flow_count].fwd_tot = 1;
-            flows[flow_count].bwd_tot = 0;
-            printf("timestamp masuknya flow: %ld\n", pkthdr->ts.tv_usec);
-            flow_count++;
-        }
-        else
-        {
-            printf("Max flow count reached. Cannot add a new flow.\n");
-        }
-    }
-    else
-    {
-        flows[flow_index].packet_count++;
-        flows[flow_index].ts_last = pkthdr->ts.tv_sec;
-        flows[flow_index].tms_last = pkthdr->ts.tv_usec;
-    }
+bool check_flag( uint8_t flag, uint8_t compare){
+    return ((flag & compare) > 0);
 }
 
 void packet_handler(unsigned char *user_data, const struct pcap_pkthdr *pkthdr, const unsigned char *packet)
 {
     const struct ip *ip_header = (struct ip *)(packet + sizeof(struct ethhdr));
+    const struct ethhdr *eth_header = (struct ethhdr *)packet;
+    char src_ip[INET_ADDRSTRLEN];
+    char dst_ip[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &(ip_header->ip_src), src_ip, INET_ADDRSTRLEN);
+    inet_ntop(AF_INET, &(ip_header->ip_dst), dst_ip, INET_ADDRSTRLEN);
+    uint16_t dport, sport;
+    
     //PROTOCOL TCP
     if (ip_header->ip_p == IPPROTO_TCP)
     {
-        tcp_handler(pkthdr, packet);
-        process_packet(packet, 54, pkthdr->len - 54);
-        
+        const struct tcphdr *tcp_header = (struct tcphdr *)(packet + sizeof(struct ethhdr) + ip_header->ip_hl * 4);
+        sport = ntohs(tcp_header->th_sport);
+        dport = ntohs(tcp_header->th_dport);
+        int index = find_flow_index(ip_header->ip_src, ip_header->ip_dst, sport, dport);
+        int tcp_hdr_size = tcp_header->th_off * 4;
+        int ip_hdr_size = ip_header->ip_hl * 4;
+        int payload_size = ip_header->ip_len - ip_hdr_size - tcp_hdr_size;
+        int flow_packet_count;
+        bool is_fwd;
+        if (index == -1){
+            tcp_flow++;
+            flow_packet_count = 0;
+            flows[flow_count].src_ip = ip_header->ip_src;
+            flows[flow_count].dst_ip = ip_header->ip_dst;
+            flows[flow_count].src_port = ntohs(tcp_header->th_sport);
+            flows[flow_count].dst_port = ntohs(tcp_header->th_dport);
+            flows[flow_count].protocol = 'T';
+            flows[flow_count].packet_count = 0;
+            flows[flow_count].fwd = 0;
+            flows[flow_count].bwd = 0;
+            flows[flow_count].fwd_tot = tcp_hdr_size;
+            flows[flow_count].bwd_tot = 0;
+            flows[flow_count].fwd_hdr_min = 0;
+            flows[flow_count].bwd_hdr_min = 0;
+            flows[flow_count].fwd_hdr_max = 0;
+            flows[flow_count].bwd_hdr_max = 0;
+            flows[flow_count].fwd_pkts_payload_min = 0;
+            flows[flow_count].FIN_count = 0;
+            flows[flow_count].SYN_count = 0;
+            flows[flow_count].PSH_fwd_count = 0;
+            flows[flow_count].PSH_bwd_count = 0;
+            flows[flow_count].ACK_count = 0;
+            flows[flow_count].URG_fwd_count = 0;
+            flows[flow_count].URG_bwd_count = 0;
+            flows[flow_count].ECE_count = 0;
+            flows[flow_count].CWR_count = 0;
+            flows[flow_count].RST_count = 0;
+            printf("allocating memory for : %ld byte", sizeof(long) * TEMP_ARR_SIZE);
+            flows[flow_count].ts_sec = malloc(sizeof(long)*TEMP_ARR_SIZE);
+            flows[flow_count].ts_msec = malloc(sizeof(long)*TEMP_ARR_SIZE);
+            *(flows[flow_count].ts_sec) = 9786;
+            *(flows[flow_count].ts_msec) = 9786;
+            // *(flows[flow_count].ts_sec) = pkthdr->ts.tv_sec;
+            // *(flows[flow_count].ts_msec) = pkthdr->ts.tv_usec;
+            if (flows[flow_count].ts_sec == NULL || flows[flow_count].ts_msec == NULL)
+            {  
+                printf("there is a problem allocating memory");
+            }
+            is_fwd = true;
+            if (is_fwd)
+            {
+                flows[flow_count].fwd++;
+                if (flows[flow_count].fwd_hdr_min > tcp_hdr_size || flows[flow_count].fwd_hdr_min == 0)
+                    flows[flow_count].fwd_hdr_min = tcp_hdr_size;
+
+                if (flows[flow_count].fwd_hdr_max < tcp_hdr_size)
+                    flows[flow_count].fwd_hdr_max = tcp_hdr_size;
+
+                if (flows[flow_count].fwd_pkts_payload_min > payload_size || flows[flow_count].fwd_pkts_payload_min == 0)
+                    flows[flow_count].fwd_pkts_payload_min = payload_size;
+                    
+                if (flows[flow_count].fwd_pkts_payload_max < payload_size)
+                    flows[flow_count].fwd_hdr_max = payload_size;
+                
+                printf("flag: %X\n", tcp_header->th_flags);
+                if(check_flag(tcp_header->th_flags, F_URG)) 
+                    flows[flow_count].URG_fwd_count++;
+                if(check_flag(tcp_header->th_flags, F_PSH))
+                    flows[flow_count].PSH_fwd_count++;
+                if(check_flag(tcp_header->th_flags, F_FIN)) 
+                    flows[flow_count].FIN_count++;
+                if(check_flag(tcp_header->th_flags, F_SYN))
+                    flows[flow_count].SYN_count++;
+                if(check_flag(tcp_header->th_flags, F_RST))
+                    flows[flow_count].RST_count++;
+                if(check_flag(tcp_header->th_flags, F_ACK))
+                    flows[flow_count].ACK_count++;
+                if(check_flag(tcp_header->th_flags, F_ECE)) 
+                    flows[flow_count].ECE_count++;
+                if(check_flag(tcp_header->th_flags, F_CWR))
+                    flows[flow_count].CWR_count++;
+                ;
+            }
+            else
+            {
+                flows[flow_count].bwd++;
+                if (flows[flow_count].bwd_hdr_min > tcp_hdr_size || flows[flow_count].bwd_hdr_min == 0)
+                    flows[flow_count].bwd_hdr_min = tcp_hdr_size;
+
+                if (flows[flow_count].bwd_hdr_max < tcp_hdr_size)
+                    flows[flow_count].bwd_hdr_max = tcp_hdr_size;
+
+                if (flows[flow_count].bwd_pkts_payload_min > payload_size || flows[flow_count].bwd_pkts_payload_min == 0)
+                    flows[flow_count].bwd_pkts_payload_min = payload_size;
+
+                if (flows[flow_count].bwd_pkts_payload_max < payload_size)
+                    flows[flow_count].bwd_hdr_max = payload_size;
+                
+                printf("flag: %X\n", tcp_header->th_flags);
+                if (check_flag(tcp_header->th_flags, F_PSH))
+                    flows[flow_count].PSH_bwd_count++;
+                if (check_flag(tcp_header->th_flags, F_URG))
+                    flows[flow_count].URG_bwd_count++;
+                if(check_flag(tcp_header->th_flags, F_FIN)) 
+                    flows[flow_count].FIN_count++;
+                if(check_flag(tcp_header->th_flags, F_SYN))
+                    flows[flow_count].SYN_count++;
+                if(check_flag(tcp_header->th_flags, F_RST))
+                    flows[flow_count].RST_count++;
+                if(check_flag(tcp_header->th_flags, F_ACK))
+                    flows[flow_count].ACK_count++;
+                if(check_flag(tcp_header->th_flags, F_ECE)) 
+                    flows[flow_count].ECE_count++;
+                if(check_flag(tcp_header->th_flags, F_CWR))
+                    flows[flow_count].CWR_count++;
+            }
+
+            printf("timestamp masuknya flow: %ld s \n", pkthdr->ts.tv_sec);
+            printf("timestamp masuknya flow: %ld ms\n", pkthdr->ts.tv_usec);
+            flows[flow_count].packet_count++;
+            flow_count++;
+            
+            if (flows[flow_count].packet_count >= MAX_PACKETS)
+            {
+                pcap_breakloop((pcap_t *)user_data);
+            }
+        }
+
+        // when the same flow is found, update flow information
+        else{
+            is_fwd = flows[index].src_ip.s_addr == ip_header->ip_src.s_addr;
+            flow_packet_count = flows[index].packet_count;
+            if(is_fwd){
+                flows[index].fwd++;
+            }else{
+                flows[index].bwd++;
+            }
+            if(flow_packet_count > TEMP_ARR_SIZE){
+                //allocate new size
+                TEMP_ARR_SIZE *= 2;
+                printf("allocating memory for : %ld byte", sizeof(long) * ((flow_packet_count/TEMP_ARR_SIZE+1)*10));
+                flows[index].ts_sec  = realloc(flows[index].ts_sec , sizeof(long) * TEMP_ARR_SIZE);
+                flows[index].ts_msec = realloc(flows[index].ts_msec, sizeof(long) * TEMP_ARR_SIZE);
+                if (flows[index].ts_sec == NULL || flows[index].ts_msec == NULL)
+                {
+                    printf("there is a problem allocating memory");
+                }
+            }
+            printf("paket ke-%d dengan ts: %ld\n", flow_packet_count, pkthdr->ts.tv_sec);
+            *(flows[index].ts_sec + (long)flow_packet_count) = (long)pkthdr->ts.tv_sec;
+            *(flows[index].ts_msec + (long)flow_packet_count) = (long)pkthdr->ts.tv_sec;
+            is_fwd = true;
+            if (is_fwd)
+            {
+                flows[index].fwd++;
+                if (flows[index].fwd_hdr_min > tcp_hdr_size || flows[index].fwd_hdr_min == 0)
+                    flows[index].fwd_hdr_min = tcp_hdr_size;
+
+                if (flows[index].fwd_hdr_max < tcp_hdr_size)
+                    flows[index].fwd_hdr_max = tcp_hdr_size;
+
+                if (flows[index].fwd_pkts_payload_min > payload_size || flows[index].fwd_pkts_payload_min == 0)
+                    flows[index].fwd_pkts_payload_min = payload_size;
+
+                if (flows[index].fwd_pkts_payload_max < payload_size)
+                    flows[index].fwd_hdr_max = payload_size;
+
+                printf("flag: %X\n", tcp_header->th_flags);
+                if (check_flag(tcp_header->th_flags, F_URG))
+                    flows[index].URG_fwd_count++;
+                if (check_flag(tcp_header->th_flags, F_PSH))
+                    flows[index].PSH_fwd_count++;
+                if (check_flag(tcp_header->th_flags, F_FIN))
+                    flows[index].FIN_count++;
+                if (check_flag(tcp_header->th_flags, F_SYN))
+                    flows[index].SYN_count++;
+                if (check_flag(tcp_header->th_flags, F_RST))
+                    flows[index].RST_count++;
+                if (check_flag(tcp_header->th_flags, F_ACK))
+                    flows[index].ACK_count++;
+                if (check_flag(tcp_header->th_flags, F_ECE))
+                    flows[index].ECE_count++;
+                if (check_flag(tcp_header->th_flags, F_CWR))
+                    flows[index].CWR_count++;
+                ;
+            }
+            else
+            {
+                flows[index].bwd++;
+                if (flows[index].bwd_hdr_min > tcp_hdr_size || flows[index].bwd_hdr_min == 0)
+                    flows[index].bwd_hdr_min = tcp_hdr_size;
+
+                if (flows[index].bwd_hdr_max < tcp_hdr_size)
+                    flows[index].bwd_hdr_max = tcp_hdr_size;
+
+                if (flows[index].bwd_pkts_payload_min > payload_size || flows[index].bwd_pkts_payload_min == 0)
+                    flows[index].bwd_pkts_payload_min = payload_size;
+
+                if (flows[index].bwd_pkts_payload_max < payload_size)
+                    flows[index].bwd_hdr_max = payload_size;
+
+                printf("flag: %X\n", tcp_header->th_flags);
+                if (check_flag(tcp_header->th_flags, F_PSH))
+                    flows[index].PSH_bwd_count++;
+                if (check_flag(tcp_header->th_flags, F_URG))
+                    flows[index].URG_bwd_count++;
+                if (check_flag(tcp_header->th_flags, F_FIN))
+                    flows[index].FIN_count++;
+                if (check_flag(tcp_header->th_flags, F_SYN))
+                    flows[index].SYN_count++;
+                if (check_flag(tcp_header->th_flags, F_RST))
+                    flows[index].RST_count++;
+                if (check_flag(tcp_header->th_flags, F_ACK))
+                    flows[index].ACK_count++;
+                if (check_flag(tcp_header->th_flags, F_ECE))
+                    flows[index].ECE_count++;
+                if (check_flag(tcp_header->th_flags, F_CWR))
+                    flows[index].CWR_count++;
+            }
+
+            printf("timestamp masuknya flow: %ld s \n", pkthdr->ts.tv_sec);
+            printf("timestamp masuknya flow: %ld ms\n", pkthdr->ts.tv_usec);
+            flows[index].packet_count++;
+            if (flows[index].packet_count >= MAX_PACKETS)
+            {
+                pcap_breakloop((pcap_t *)user_data);
+            }
+        }
     }
-
-
     //PROTOCOL UDP
     else if (ip_header->ip_p == IPPROTO_UDP)
     {
         // udp_handler(pkthdr, packet);
+        printf("================================================================ + satu udp, total:: %d", udp_flow);
+        const struct udphdr *udp_header = (struct udphdr *)(packet + sizeof(struct ethhdr) + ip_header->ip_hl * 4);
+        int index = find_flow_index(ip_header->ip_src, ip_header->ip_dst, sport, dport);
+        if(index == -1){
+            udp_flow++;
+            flows[flow_count].src_ip = ip_header->ip_src;
+            flows[flow_count].dst_ip = ip_header->ip_dst;
+            flows[flow_count].src_port = ntohs(udp_header->uh_sport);
+            flows[flow_count].dst_port = ntohs(udp_header->uh_dport);
+            flows[flow_count].protocol = 'U';
+            flows[flow_count].packet_count = 0;
+            flows[flow_count].packet_count++;
+            flow_count++;
+                printf("================================================================ + %d udp, count:: %d", flow_count, flows[flow_count].packet_count);
+            if (flows[flow_count].packet_count >= MAX_PACKETS)
+            {
+                pcap_breakloop((pcap_t *)user_data);
+            }
+        }else{
+            flows[index].src_ip = ip_header->ip_src;
+            flows[index].dst_ip = ip_header->ip_dst;
+            flows[index].src_port = ntohs(udp_header->uh_sport);
+            flows[index].dst_port = ntohs(udp_header->uh_dport);
+            flows[index].protocol = 'T';
+            flows[flow_count].packet_count++;
+            printf("================================================================ + satu udp, count:: %d", flows[index].packet_count);
+            if (flows[index].packet_count >= MAX_PACKETS)
+            {
+                pcap_breakloop((pcap_t *)user_data);
+            }
+        }
     }
-    packet_count++;
+    else{
+        printf("else, protocol:%d", ip_header->ip_p);
+    }
+    // packet_count++;
     printf("\n");
     pcap_dump((u_char *)pcap_dumper, pkthdr, packet);
-    if (packet_count >= MAX_PACKETS)
+    if (flow_count >= MAX_FLOWS)
     {
         pcap_breakloop((pcap_t *)user_data);
     }
@@ -375,7 +374,7 @@ int main(int argc, char **argv)
     time_t t = time(NULL);
     struct tm *tm = localtime(&t);
     char s[64];
-    size_t ret = strftime(s, sizeof(s), "%Y-%m-%d_%H-%M-%S.pcap", tm);
+    size_t ret = strftime(s, sizeof(s), "captured_packets/%Y-%m-%d_%H-%M-%S.pcap", tm);
     assert(ret);
     FILE *pcapFile = fopen(s, "wb");
     fclose(pcapFile);
@@ -396,56 +395,57 @@ int main(int argc, char **argv)
     pcap_loop(handle, 0, packet_handler, (unsigned char *)handle);
     pcap_dump_close(pcap_dumper);
     pcap_close(handle);
-    for (int k = 0; k < flow_count; k++)
-    {
-        if (flows[k].protocol == 'T')
-        {
-            tcp_flow += 1;
-        }
-        else
-        {
-            udp_flow += 1;
-        }
-    }
-    // Print flow information
-    for (int i = 0; i < flow_count; i++)
-    {
-        print_flow_info(i);
-        cJSON *tempJson = cJSON_CreateObject();
-        cJSON *tempArr = cJSON_CreateArray();
-        cJSON_AddStringToObject(tempJson, "src_ip", inet_ntoa(flows[i].src_ip));
-        cJSON_AddStringToObject(tempJson, "dst_ip", inet_ntoa(flows[i].dst_ip));
-        cJSON_AddNumberToObject(tempJson, "src_port", flows[i].src_port);
-        cJSON_AddNumberToObject(tempJson, "dst_port", flows[i].dst_port);
-        cJSON_AddNumberToObject(tempJson, "pkt_sum", flows[i].packet_count);
-        cJSON_AddNumberToObject(tempJson, "protocol", flows[i].protocol);
-        cJSON_AddNumberToObject(tempJson, "ts_start", flows[i].ts_start);
-        cJSON_AddNumberToObject(tempJson, "ts_last", flows[i].ts_last);
-        cJSON_AddNumberToObject(tempJson, "tms_start", flows[i].tms_start);
-        cJSON_AddNumberToObject(tempJson, "tms_last", flows[i].tms_last);
-        cJSON_AddNumberToObject(tempJson, "fwd_tot", flows[i].fwd_tot);
-        cJSON_AddNumberToObject(tempJson, "bwd_tot", flows[i].bwd_tot);
-        for (int j = 0; j < sizeof(flows[i].pkt_array)/sizeof(int); j++)
-        {
-            cJSON_AddItemToArray(tempArr, cJSON_CreateNumber(flows[i].pkt_array[j]));
-        }
-        cJSON_AddItemToObject(tempJson, "payload_size_arr", tempArr);
-        cJSON_AddItemToArray(flowArr, tempJson);
-        printf("flow array: %s", cJSON_Print(tempJson));
-        printf("\n");
-    }
-
-
-    printf("flow array: %s\n", cJSON_Print(flowArr));
-    strftime(s, sizeof(s), "captured_packets/%Y-%m-%d_%H-%M-%S.json", tm);
-    FILE *fp = fopen(s, "w");
-    if(fp == NULL){
-        printf("can't create file");
-    }
-    fputs(cJSON_Print(flowArr), fp);
-    cJSON_Delete(flowArr);
-    fclose;
     printf("Total UDP Flowss: %d\n", udp_flow);
     printf("Total TCP Flows: %d\n", tcp_flow);
+
+
+    //feel free to move or delete this since it's just for logging purpose
+
+    for (int i = 0; i < flow_count; i++)
+    {
+        // tempJson = cJSON_CreateObject();
+        // tsArr = cJSON_CreateArray();
+        // payloadArr = cJSON_CreateArray();
+        // cJSON_AddStringToObject(tempJson, "src_ip", inet_ntoa(flows[i].src_ip));
+        // cJSON_AddStringToObject(tempJson, "dst_ip", inet_ntoa(flows[i].dst_ip));
+        // cJSON_AddNumberToObject(tempJson, "src_port", flows[i].src_port);
+        // cJSON_AddNumberToObject(tempJson, "dst_port", flows[i].dst_port);
+        // cJSON_AddNumberToObject(tempJson, "pkt_sum", flows[i].packet_count);
+        // cJSON_AddNumberToObject(tempJson, "protocol", flows[i].protocol);
+        // cJSON_AddNumberToObject(tempJson, "fwd_tot", flows[i].fwd_tot);
+        // cJSON_AddNumberToObject(tempJson, "bwd_tot", flows[i].bwd_tot);
+        // cJSON_AddNumberToObject(tempJson, "fwd", flows[i].fwd);
+        // cJSON_AddNumberToObject(tempJson, "bwd_tot",flows[i].bwd);
+        if(flows[i].protocol == 'T'){
+            printf("[");
+            for (int j = 0; j < flows[i].packet_count ; j++)
+            {
+                // cJSON_AddItemToArray(tsArr, cJSON_CreateNumber(*(flows[i].ts_sec + j)));
+                // printf("%ld,", *(flows[i].ts_sec + j));
+                
+                    // printf("%p,\n", flows[i].ts_sec + j);
+                    // printf("%p, : %ld\n", flows[i].ts_sec + j, *(flows[i].ts_sec + j));
+                printf("%ld,", *(flows[i].ts_sec + j));
+                
+            }
+            printf("]\n");
+        }
+        // cJSON_AddItemToObject(tempJson, "ts_sec_arr", tsArr);
+        // cJSON_AddItemToArray(flowArr, tempJson);
+        // printf("flow array: %s", cJSON_Print(tempJson));
+        printf("%d-th flow packet count: %d\n",i,  flows[i].packet_count);
+        // if(flows[i].ts_sec != NULL){
+        //     printf("alamat pada packet ke-%d : %ln", i, flows[i].ts_sec);
+        //     free(flows[i].ts_sec);
+        //     flows[i].ts_sec = NULL;
+        // }
+        // if (flows[i].ts_msec != NULL)
+        // {
+        //     printf("alamat pada packet ke-%d : %ln", i, flows[i].ts_msec);
+        //     free(flows[i].ts_msec);
+        //     flows[i].ts_msec = NULL;
+        // }
+    }
+    fclose;
     return 0;
 }
