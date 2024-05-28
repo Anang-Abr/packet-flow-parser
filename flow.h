@@ -32,17 +32,10 @@ typedef struct
     int ECE_count;
     int CWR_count;
     int RST_count;
-    // int flow_SYN_flag_count;
-    // int flow_RST_flag_count;
-    // int flow_CWR_flag_count;
-    // int flow_ECE_flag_count;
-    // int fwd_URG_flag_count;
-    // int bwd_URG_flag_count;
     int fwd_pkts_payload_min;
     int fwd_pkts_payload_max;
     int fwd_pkts_payload_tot;
     int fwd_pkts_payload_std;
-
     int bwd_pkts_payload_min;
     int bwd_pkts_payload_max;
     int bwd_pkts_payload_tot;
@@ -53,5 +46,20 @@ typedef struct
     // int flow_pkts_payload_std;
     // int pkt_array[50];
 } FlowInfo;
+
+typedef struct{
+    FlowInfo *flows;
+    unsigned int capacity;
+    unsigned int count;
+} FlowsBuffer;
+
+#define F_FIN 0x01
+#define F_SYN 0x02
+#define F_RST 0x04
+#define F_PSH 0x08
+#define F_ACK 0x10
+#define F_URG 0x20
+#define F_ECE 0x40
+#define F_CWR 0x80
 
 #endif
