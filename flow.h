@@ -1,5 +1,6 @@
 #ifndef FLOW_INFO_H
 #define FLOW_INFO_H
+#include <stdbool.h>
 
 typedef struct
 {
@@ -11,9 +12,6 @@ typedef struct
     char protocol;
     long *ts_sec;
     long *ts_msec;
-    // time_t ts_last;
-    // time_t tms_start;
-    // time_t tms_last;
     int fwd;
     int bwd;
     int fwd_tot;
@@ -32,26 +30,36 @@ typedef struct
     int ECE_count;
     int CWR_count;
     int RST_count;
-    int fwd_pkts_payload_min;
-    int fwd_pkts_payload_max;
-    int fwd_pkts_payload_tot;
-    int fwd_pkts_payload_std;
-    int bwd_pkts_payload_min;
-    int bwd_pkts_payload_max;
-    int bwd_pkts_payload_tot;
-    int bwd_pkts_payload_std;
-    // int flow_pkts_payload_min;
-    // int flow_pkts_payload_max;
-    // int flow_pkts_payload_tot;
-    // int flow_pkts_payload_std;
-    // int pkt_array[50];
+    int fwd_payload_min;
+    int fwd_payload_max;
+    int fwd_payload_tot;
+    int fwd_payload_std;
+    int bwd_payload_min;
+    int bwd_payload_max;
+    int bwd_payload_tot;
+    int bwd_payload_std;
+    long *payloads_size;
+    bool hasFin;
+    bool waitACK;
 } FlowInfo;
 
 typedef struct{
     FlowInfo *flows;
     unsigned int capacity;
     unsigned int count;
+    FlowInfo *deleted;
 } FlowsBuffer;
+
+typedef struct Node{
+    FlowInfo *flow;
+    struct Node *next;
+} Node;
+
+typedef struct Queue{
+    Node *front;
+    Node *rear;
+} QueueBuffer;
+
 
 #define F_FIN 0x01
 #define F_SYN 0x02
@@ -61,5 +69,14 @@ typedef struct{
 #define F_URG 0x20
 #define F_ECE 0x40
 #define F_CWR 0x80
+
+void packet_handler(unsigned char *user_data, const struct pcap_pkthdr *pkthdr, const unsigned char *packet);
+void initFlowBuffer(FlowsBuffer *fbs, unsigned int initSize);
+void initQueue(QueueBuffer *q);
+void enqueue(QueueBuffer *q, FlowInfo *flow);
+FlowInfo *dequeue(QueueBuffer *q);
+FlowInfo *queueSearch(QueueBuffer *q, struct in_addr ip_src, struct in_addr ip_dst, uint16_t src_port, uint16_t dst_port);
+
+extern QueueBuffer *queueBuffer;
 
 #endif
