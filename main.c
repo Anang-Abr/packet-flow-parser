@@ -19,7 +19,9 @@
 #define MAX_PACKETS 30
 
 unsigned int flow_count = 0;
-unsigned int packet_count = 0;
+unsigned long packet_count = 0;
+unsigned long packet_received = 0;
+unsigned long packet_processed = 0;
 char protocol = 'O';
 unsigned int tcp_flow = 0;
 unsigned int udp_flow = 0;
@@ -33,13 +35,30 @@ void initQueue(QueueBuffer *q);
 void enqueue(QueueBuffer *q, FlowInfo *flow);
 FlowInfo *dequeue(QueueBuffer *q);
 FlowInfo *queueSearch(QueueBuffer *q, struct in_addr ip_src, struct in_addr ip_dst, uint16_t src_port, uint16_t dst_port);
+void freeQueue(QueueBuffer *q);
 
 /**
  * TODO
  * ? Install zeek flowmeter
  */
 void handle_sigint(){
-    printf("packet captured : %d",packet_count);
+    printf("packet captured : %ld\n",packet_count);
+    printf("packet received : %ld\n",packet_received);
+    printf("packet processed : %ld\n",packet_processed);
+    for(int i = 0; i < flowBuffer->count; i++){
+        if(flowBuffer->flows[i].payloads_size != NULL){
+            free(flowBuffer->flows[i].payloads_size);
+        }
+        if(flowBuffer->flows[i].ts_msec != NULL){
+            free(flowBuffer->flows[i].ts_msec);
+        }
+        if(flowBuffer->flows[i].ts_sec != NULL){
+            free(flowBuffer->flows[i].ts_sec);
+        }
+    }
+    freeQueue(queueBuffer);
+    free(flowBuffer->flows);
+    free(flowBuffer);
     exit(0);
 }
 
@@ -51,6 +70,9 @@ int main(int argc, char **argv)
     queueBuffer = (QueueBuffer *)malloc(sizeof(QueueBuffer));
     initQueue(queueBuffer);
     if(flowBuffer == NULL){
+        perror("error allocating memory for flow buffer");
+    }
+    if(queueBuffer == NULL){
         perror("error allocating memory for flow buffer");
     }
     initFlowBuffer(flowBuffer, 10);
@@ -73,18 +95,22 @@ int main(int argc, char **argv)
 void packet_handler(unsigned char *user_data, const struct pcap_pkthdr *pkthdr, const unsigned char *packet)
 {
     // PROTOCOL TCP
+    packet_received++;
     const struct ip *ip_header = (struct ip *)(packet + sizeof(struct ethhdr));
     if (ip_header->ip_p == IPPROTO_TCP)
     {
-        packet_count++;
         tcp_handler((FlowsBuffer *)user_data, packet, pkthdr);
+        packet_count++;
     }
-    
 }
 
 void initFlowBuffer(FlowsBuffer *fbs, unsigned int initSize)
 {
     fbs->flows = (FlowInfo *)malloc(sizeof(FlowInfo) * initSize);
+    if(fbs->flows == NULL){
+        free(fbs);
+        perror("error allocating memory\n");
+    }
     fbs->capacity = initSize;
     fbs->count = 0;
 }
@@ -119,7 +145,7 @@ FlowInfo *dequeue(QueueBuffer *q)
 {
     if (q->front == NULL)
     {
-        printf("Queue is empty\n");
+        // printf("Queue is empty\n");
         return NULL;
     }
 
@@ -152,4 +178,24 @@ FlowInfo *queueSearch(QueueBuffer *q, struct in_addr ip_src, struct in_addr ip_d
         current = current->next;
     }
     return NULL; // If no match is found
+}
+
+void freeQueue(QueueBuffer *q)
+{
+    Node *current = q->front;
+    Node *next;
+
+    while (current != NULL)
+    {
+        next = current->next;
+        for(int i = 0 ; i< current->flow->packet_count ; i++){
+        }
+        free(current->flow); // Free the FlowInfo structure
+        // free(current);       // Free the node
+        current = next;
+    }
+
+    // Finally, reset the queue pointers
+    q->front = q->rear = NULL;
+    free(q);
 }

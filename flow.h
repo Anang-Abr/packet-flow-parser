@@ -32,13 +32,14 @@ typedef struct
     int RST_count;
     int fwd_payload_min;
     int fwd_payload_max;
-    int fwd_payload_tot;
+    unsigned long fwd_payload_tot;
     int fwd_payload_std;
     int bwd_payload_min;
     int bwd_payload_max;
-    int bwd_payload_tot;
+    unsigned long bwd_payload_tot;
     int bwd_payload_std;
     long *payloads_size;
+    unsigned long capacity;
     bool hasFin;
     bool waitACK;
 } FlowInfo;

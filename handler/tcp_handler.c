@@ -19,26 +19,30 @@ int count = 0;
 
 void printFlowInfo(FlowInfo *f)
 {
-    FILE *fptr;
-    struct tm ts;
-    struct tm te;
-    char start[80];
-    char end[80];
-    time_t time_start = f->ts_sec[0];
-    time_t time_end = f->ts_sec[f->packet_count-1];
-    cJSON *exportObj = cJSON_CreateObject();
-    cJSON *ts_sec = cJSON_CreateArray();
-    cJSON *ts_msec = cJSON_CreateArray();
-    cJSON *payloads = cJSON_CreateArray();
-    gmtime_r(&time_start, &ts);
-    gmtime_r(&time_end, &te);
-    strftime(start, sizeof(start), "%Y-%m-%d %H:%M:%S", &ts);
-    strftime(end, sizeof(end), "%Y-%m-%d %H:%M:%S", &te);
+    // FILE *fptr;
+    // struct tm ts;
+    // struct tm te;
+    // char start[80];
+    // char end[80];
+    // time_t time_start = f->ts_sec[0];
+    // time_t time_end = f->ts_sec[f->packet_count-1];
+    // cJSON *exportObj = cJSON_CreateObject();
+    // cJSON *ts_sec = cJSON_CreateArray();
+    // cJSON *ts_msec = cJSON_CreateArray();
+    // cJSON *payloads = cJSON_CreateArray();
+    // gmtime_r(&time_start, &ts);
+    // gmtime_r(&time_end, &te);
+    // strftime(start, sizeof(start), "%Y-%m-%d %H:%M:%S", &ts);
+    // strftime(end, sizeof(end), "%Y-%m-%d %H:%M:%S", &te);
+    // if(f->ts_sec) free(f->ts_sec);
+    // if(f->ts_msec) free(f->ts_msec);
+    // if(f->payloads_size) free(f->payloads_size);
     enqueue(queueBuffer, f);
-    fptr = fopen("./captured_packets/flow.json", "a");
-    if(fptr == NULL){
-        perror("failed to open the log");
-    }
+    printf("!%d\n", count++);
+    // fptr = fopen("./captured_packets/flow.json", "a");
+    // if(fptr == NULL){
+    //     perror("failed to open the log");
+    // }
     // if (
     //     fprintf(fptr, "%-3d|%s.%06ld - %s.%06ld|[%-12s:%-5d -> %-12s:%-5d]==>%-6d\n",
     //     ++count, start, f->ts_msec[0],  end,  f->ts_msec[f->packet_count - 1], inet_ntoa(f->src_ip), f->src_port, inet_ntoa(f->dst_ip), f->dst_port, f->packet_count) < 0)
@@ -47,48 +51,60 @@ void printFlowInfo(FlowInfo *f)
     // }
 
     //genereate the json value
-    cJSON_AddStringToObject(exportObj, "src_ip", inet_ntoa(f->src_ip));
-    cJSON_AddStringToObject(exportObj, "dst_ip", inet_ntoa(f->dst_ip));
-    cJSON_AddNumberToObject(exportObj, "src_port", f->src_port);
-    cJSON_AddNumberToObject(exportObj, "dst_port", f->dst_port);
-    cJSON_AddNumberToObject(exportObj, "protocol", f->protocol);
-    cJSON_AddNumberToObject(exportObj, "bwd_count", f->bwd);
-    cJSON_AddNumberToObject(exportObj, "bwd_hdr_max", f->bwd_hdr_max);
-    cJSON_AddNumberToObject(exportObj, "bwd_hdr_min", f->bwd_hdr_min);
-    cJSON_AddNumberToObject(exportObj, "bwd_pkts_payload_max", f->bwd_payload_max);
-    cJSON_AddNumberToObject(exportObj, "bwd_payload_min", f->bwd_payload_min);
-    cJSON_AddNumberToObject(exportObj, "bwd_payload_tot", f->bwd_payload_tot);
-    cJSON_AddNumberToObject(exportObj, "bwd_tot", f->bwd_tot);
-    cJSON_AddNumberToObject(exportObj, "fwd_count", f->fwd);
-    cJSON_AddNumberToObject(exportObj, "fwd_hdr_max", f->fwd_hdr_max);
-    cJSON_AddNumberToObject(exportObj, "fwd_hdr_min", f->fwd_hdr_min);
-    cJSON_AddNumberToObject(exportObj, "fwd_payload_max", f->fwd_payload_max);
-    cJSON_AddNumberToObject(exportObj, "fwd_payload_min", f->fwd_payload_min);
-    cJSON_AddNumberToObject(exportObj, "fwd_payload_tot", f->fwd_payload_tot);
-    cJSON_AddNumberToObject(exportObj, "fwd_tot", f->fwd_tot);
-    cJSON_AddNumberToObject(exportObj, "ACK_count", f->ACK_count);
-    cJSON_AddNumberToObject(exportObj, "SYN_count", f->SYN_count);
-    cJSON_AddNumberToObject(exportObj, "FIN_count", f->FIN_count);
-    cJSON_AddNumberToObject(exportObj, "ECE_count", f->ECE_count);
-    cJSON_AddNumberToObject(exportObj, "CWR_count", f->CWR_count);
-    cJSON_AddNumberToObject(exportObj, "RST_count", f->RST_count);
-    cJSON_AddNumberToObject(exportObj, "packet_count", f->packet_count);
+    // cJSON_AddStringToObject(exportObj, "src_ip", inet_ntoa(f->src_ip));
+    // cJSON_AddStringToObject(exportObj, "dst_ip", inet_ntoa(f->dst_ip));
+    // cJSON_AddNumberToObject(exportObj, "src_port", f->src_port);
+    // cJSON_AddNumberToObject(exportObj, "dst_port", f->dst_port);
+    // cJSON_AddNumberToObject(exportObj, "protocol", f->protocol);
+    // cJSON_AddNumberToObject(exportObj, "bwd_count", f->bwd);
+    // cJSON_AddNumberToObject(exportObj, "bwd_hdr_max", f->bwd_hdr_max);
+    // cJSON_AddNumberToObject(exportObj, "bwd_hdr_min", f->bwd_hdr_min);
+    // cJSON_AddNumberToObject(exportObj, "bwd_pkts_payload_max", f->bwd_payload_max);
+    // cJSON_AddNumberToObject(exportObj, "bwd_payload_min", f->bwd_payload_min);
+    // cJSON_AddNumberToObject(exportObj, "bwd_payload_tot", f->bwd_payload_tot);
+    // cJSON_AddNumberToObject(exportObj, "bwd_tot", f->bwd_tot);
+    // cJSON_AddNumberToObject(exportObj, "fwd_count", f->fwd);
+    // cJSON_AddNumberToObject(exportObj, "fwd_hdr_max", f->fwd_hdr_max);
+    // cJSON_AddNumberToObject(exportObj, "fwd_hdr_min", f->fwd_hdr_min);
+    // cJSON_AddNumberToObject(exportObj, "fwd_payload_max", f->fwd_payload_max);
+    // cJSON_AddNumberToObject(exportObj, "fwd_payload_min", f->fwd_payload_min);
+    // cJSON_AddNumberToObject(exportObj, "fwd_payload_tot", f->fwd_payload_tot);
+    // cJSON_AddNumberToObject(exportObj, "fwd_tot", f->fwd_tot);
+    // cJSON_AddNumberToObject(exportObj, "ACK_count", f->ACK_count);
+    // cJSON_AddNumberToObject(exportObj, "SYN_count", f->SYN_count);
+    // cJSON_AddNumberToObject(exportObj, "FIN_count", f->FIN_count);
+    // cJSON_AddNumberToObject(exportObj, "ECE_count", f->ECE_count);
+    // cJSON_AddNumberToObject(exportObj, "CWR_count", f->CWR_count);
+    // cJSON_AddNumberToObject(exportObj, "RST_count", f->RST_count);
+    // cJSON_AddNumberToObject(exportObj, "packet_count", f->packet_count);
 
-    for(int i = 0; i<f->packet_count ; i++){
-        cJSON_AddItemToArray(ts_sec, cJSON_CreateNumber(f->ts_sec[i]));
-        cJSON_AddItemToArray(ts_msec, cJSON_CreateNumber(f->ts_msec[i]));
-        cJSON_AddItemToArray(payloads, cJSON_CreateNumber(f->payloads_size[i]));
-    }
-    cJSON_AddItemToObject(exportObj, "ts_sec", ts_sec);
-    cJSON_AddItemToObject(exportObj, "ts_msec", ts_msec);
-    cJSON_AddItemToObject(exportObj, "payloads", payloads);
-    fputs(cJSON_Print(exportObj), fptr);
-    fprintf(fptr,",");
-    if (fclose(fptr) != 0)
-    {
-        perror("failed to close the log");
-    }
-    cJSON_Delete(exportObj);
+    // for(int i = 0; i<f->packet_count ; i++){
+    //     if(f->ts_sec != NULL && f->ts_msec && f->payloads_size != NULL){
+    //         cJSON_AddItemToArray(ts_sec, cJSON_CreateNumber(f->ts_sec[i]));
+    //         cJSON_AddItemToArray(ts_msec, cJSON_CreateNumber(f->ts_msec[i]));
+    //         cJSON_AddItemToArray(payloads, cJSON_CreateNumber(f->payloads_size[i]));
+    //     }
+    // }
+    // cJSON_AddItemToObject(exportObj, "ts_sec", ts_sec);
+    // cJSON_AddItemToObject(exportObj, "ts_msec", ts_msec);
+    // cJSON_AddItemToObject(exportObj, "payloads", payloads);
+    // fputs(cJSON_Print(exportObj), fptr);
+    // fprintf(fptr,",");
+    // if (fclose(fptr) != 0)
+    // {
+    //     perror("failed to close the log");
+    // }
+    // free(f->ts_sec);
+    // free(f->ts_msec);
+    // free(f->payloads_size);
+    // cJSON_free(ts_msec);
+    // cJSON_free(ts_sec);
+    // cJSON_free(payloads);
+    // cJSON_free(exportObj);
+    // cJSON_Delete(ts_msec);
+    // cJSON_Delete(ts_sec);
+    // cJSON_Delete(payloads);
+    // cJSON_Delete(exportObj);
 }
 
 bool check_flag(uint8_t flag, uint8_t compare)
@@ -105,7 +121,7 @@ FlowInfo *find_flow_index(
 {
     FlowInfo *foundFlow = queueSearch(queueBuffer, src_ip, dst_ip, src_port, dst_port);
     if(foundFlow != NULL){
-        printf("ada di dalam queue buffer");
+        // printf("ada di dalam queue buffer");
         return NULL;
     }
     for (int i = 0; i < flowBuffer->count; i++)
@@ -128,11 +144,27 @@ FlowInfo *find_flow_index(
 
 void tcp_handler(FlowsBuffer *fb, const unsigned char *packet, const struct pcap_pkthdr *pkthdr)
 {
+    packet_processed++;
     if (fb->count >= fb->capacity)
     {
         fb->capacity *= 2;
-        printf("reallocating to %ld bytes\n", fb->capacity * sizeof(FlowInfo));
-        fb->flows = realloc(fb->flows, sizeof(FlowInfo) * fb->capacity);
+        FlowInfo *temp_flows = realloc(fb->flows, sizeof(FlowInfo) * fb->capacity);
+    
+    // Check if reallocation was successful
+    if (temp_flows == NULL)
+    {
+        // Handle reallocation failure
+        
+        // Free the original pointer
+        free(fb->flows);
+        
+        // You might choose to exit here or handle the error in another way
+        perror("Failed to reallocate memory for FlowsBuffer");
+        exit(EXIT_FAILURE);
+    }
+    
+    // Assign the reallocated memory back to the original pointer
+    fb->flows = temp_flows;
     }
     const struct ip *ip_header = (struct ip *)(packet + sizeof(struct ethhdr));
     const struct ethhdr *eth_header = (struct ethhdr *)packet;
@@ -149,9 +181,15 @@ void tcp_handler(FlowsBuffer *fb, const unsigned char *packet, const struct pcap
             fb->flows[fb->count] = *found_flow;
             fb->count++;
         }else{
-            printf("replacing old flow with %d packets\n", found_flow->packet_count);
-            *found_flow = *tcp_generate_new_flow(packet, pkthdr);
-            printf("to new flow with %d packets\n", found_flow->packet_count);
+            // printf("replacing old flow with %d packets\n", found_flow->packet_count);
+            if (found_flow->ts_sec != NULL || found_flow->ts_sec != NULL || found_flow->payloads_size != NULL)
+            {
+                // free(found_flow->ts_sec);
+                // free(found_flow->ts_msec);
+                // free(found_flow->payloads_size);
+            }
+            reuse_flow(found_flow, packet, pkthdr);
+            // printf("to new flow with %d packets\n", found_flow->packet_count);
         }
     }
     // when the same flow is found, update flow information
@@ -166,7 +204,6 @@ FlowInfo *tcp_generate_new_flow(
     const unsigned char *packet,
     const struct pcap_pkthdr *pkthdr)
 {
-    // printf("buat flow baru\n");
     FlowInfo *new_flow = (FlowInfo *)malloc(sizeof(FlowInfo));
     const struct ip *ip_hdr = (struct ip *)(packet + sizeof(struct ethhdr));
     const struct ethhdr *eth_hdr = (struct ethhdr *)packet;
@@ -203,18 +240,23 @@ FlowInfo *tcp_generate_new_flow(
     new_flow->ECE_count = 0;
     new_flow->CWR_count = 0;
     new_flow->RST_count = 0;
-    new_flow->ts_sec = malloc(sizeof(long) * ARR_SIZE);
-    new_flow->ts_msec = malloc(sizeof(long) * ARR_SIZE);
-    new_flow->payloads_size = malloc(sizeof(long) * ARR_SIZE);
+    new_flow->capacity = 10;
+    new_flow->ts_sec = (long *)malloc(sizeof(long) * new_flow->capacity);
+    new_flow->ts_msec = (long *)malloc(sizeof(long) * new_flow->capacity);
+    new_flow->payloads_size = (long *)malloc(sizeof(long) * new_flow->capacity);
     new_flow->ts_sec[new_flow->packet_count] = pkthdr->ts.tv_sec;
     new_flow->ts_msec[new_flow->packet_count] = pkthdr->ts.tv_usec;
     new_flow->payloads_size[new_flow->packet_count] = payload_size;
     new_flow->hasFin = false;
     new_flow->waitACK = false;
-    if (new_flow->ts_sec == NULL || new_flow->ts_msec == NULL)
+    if (new_flow->ts_sec == NULL || new_flow->ts_msec == NULL || new_flow->payloads_size == NULL)
     {
+        if(new_flow->ts_sec)free(new_flow->ts_sec);
+        if(new_flow->ts_msec)free(new_flow->ts_msec);
+        if(new_flow->payloads_size)free(new_flow->payloads_size);
         perror("there is a problem allocating memory");
     }
+
     new_flow->fwd++;
     if (new_flow->fwd_hdr_min > tcp_hdr_size || new_flow->fwd_hdr_min == 0)
         new_flow->fwd_hdr_min = tcp_hdr_size;
@@ -244,7 +286,6 @@ FlowInfo *tcp_generate_new_flow(
         new_flow->RST_count++;
     }
     if (check_flag(tcp_hdr->th_flags, F_ACK)){
-        printf("mark this ACK flag");
         new_flow->ACK_count++;
     }
     if (check_flag(tcp_hdr->th_flags, F_ECE)){
@@ -271,19 +312,46 @@ void tcp_update_flow(
     bool is_fwd = flow->src_ip.s_addr == ip_hdr->ip_src.s_addr;
     int flow_packet_count = flow->packet_count;
     flow->packet_count++;
-    if (flow_packet_count > ARR_SIZE)
+    if (flow_packet_count >= flow->capacity)
     {
         // allocate new size
-        ARR_SIZE *= 2;
-        printf("allocating memory for : %d byte", flow->packet_count * 2);
-        flow->ts_sec = realloc(flow->ts_sec, sizeof(long) * ARR_SIZE * 2);
-        flow->ts_msec = realloc(flow->ts_msec, sizeof(long) * ARR_SIZE * 2);
-        flow->payloads_size = realloc(flow->payloads_size, sizeof(long) * ARR_SIZE * 2);
-        // ARR_SIZE = flow->packet_count * 2;
-        if (flow->ts_sec == NULL || flow->ts_msec == NULL)
+        flow->capacity *= 2;
+        // printf("allocating memory for : %d byte", flow->packet_count * 2);
+        long *temp_ts_sec = realloc(flow->ts_sec, sizeof(long) * flow->capacity);
+        long *temp_ts_msec = realloc(flow->ts_msec, sizeof(long) * flow->capacity);
+        long *temp_payloads_size = realloc(flow->payloads_size, sizeof(long) * flow->capacity);
+
+        // Check if any reallocation failed
+        if (temp_ts_sec == NULL || temp_ts_msec == NULL || temp_payloads_size == NULL)
         {
-            perror("there is a problem allocating memory");
+            perror("Failed to reallocate memory for flow timestamps or payload sizes");
+
+            // Clean up successfully reallocated memory to prevent memory leaks
+            if (temp_ts_sec)
+            {
+                free(temp_ts_sec);
+            }
+            if (temp_ts_msec)
+            {
+                free(temp_ts_msec);
+            }
+            if (temp_payloads_size)
+            {
+                free(temp_payloads_size);
+            }
+
+            // You can also free the original memory here if you want to exit, to ensure no memory is leaked
+            free(flow->ts_sec);
+            free(flow->ts_msec);
+            free(flow->payloads_size);
+
+            exit(EXIT_FAILURE);
         }
+
+        // Assign the successfully reallocated memory back to the original pointers
+        flow->ts_sec = temp_ts_sec;
+        flow->ts_msec = temp_ts_msec;
+        flow->payloads_size = temp_payloads_size;
     }
     flow->ts_sec[flow_packet_count] = (long)pkthdr->ts.tv_sec;
     flow->ts_msec[flow_packet_count] = (long)pkthdr->ts.tv_usec;
@@ -307,11 +375,11 @@ void tcp_update_flow(
         if (check_flag(tcp_hdr->th_flags, F_ACK))
         {
             flow->ACK_count++;
-            printf("ACK\n");
+            // printf("ACK\n");
             if (flow->waitACK)
             {
                 printFlowInfo(flow);
-        }
+            }
         }
         if (check_flag(tcp_hdr->th_flags, F_URG))
         {
@@ -324,7 +392,6 @@ void tcp_update_flow(
         if (check_flag(tcp_hdr->th_flags, F_FIN))
         {
             flow->FIN_count++;
-            printf("has FIN? %d\n",flow->hasFin);
             if(flow->hasFin){
                 // printFlowInfo(flow);
                 flow->waitACK = true;
@@ -368,7 +435,6 @@ void tcp_update_flow(
         if (check_flag(tcp_hdr->th_flags, F_ACK))
         {
             flow->ACK_count++;
-            printf("ACK\n");
             if (flow->waitACK)
             {
                 printFlowInfo(flow);
@@ -386,14 +452,12 @@ void tcp_update_flow(
         {
             flow->FIN_count++;
             flow->FIN_count++;
-            printf("has FIN? %d\n", flow->hasFin);
             if (flow->hasFin)
             {
                 // printFlowInfo(flow);
                 flow->waitACK = true;
             }
             flow->hasFin = true;
-            printf("FIN\n");
         }
         if (check_flag(tcp_hdr->th_flags, F_SYN))
         {
@@ -412,6 +476,113 @@ void tcp_update_flow(
             flow->CWR_count++;
         }
     }
+}
+
+void reuse_flow(
+    FlowInfo *rf,
+    const unsigned char *packet,
+    const struct pcap_pkthdr *pkthdr)
+{
+    const struct ip *ip_hdr = (struct ip *)(packet + sizeof(struct ethhdr));
+    const struct ethhdr *eth_hdr = (struct ethhdr *)packet;
+    const struct tcphdr *tcp_hdr = (struct tcphdr *)(packet + sizeof(struct ethhdr) + ip_hdr->ip_hl * 4);
+    int tcp_hdr_size = tcp_hdr->th_off * 4;
+    int ip_hdr_size = ip_hdr->ip_hl * 4;
+    int payload_size = ip_hdr->ip_len - ip_hdr_size - tcp_hdr_size;
+    rf->src_ip = ip_hdr->ip_src;
+    rf->dst_ip = ip_hdr->ip_dst;
+    rf->src_port = ntohs(tcp_hdr->th_sport);
+    rf->dst_port = ntohs(tcp_hdr->th_dport);
+    rf->protocol = 'T';
+    rf->packet_count = 0;
+    rf->fwd = 0;
+    rf->bwd = 0;
+    rf->fwd_tot = tcp_hdr->th_off * 4;
+    rf->bwd_tot = 0;
+    rf->fwd_hdr_min = 0;
+    rf->bwd_hdr_min = 0;
+    rf->fwd_hdr_max = 0;
+    rf->bwd_hdr_max = 0;
+    rf->fwd_payload_min = 0;
+    rf->fwd_payload_max = 0;
+    rf->bwd_payload_min = 0;
+    rf->bwd_payload_max = 0;
+    rf->fwd_payload_tot = 0;
+    rf->FIN_count = 0;
+    rf->SYN_count = 0;
+    rf->PSH_fwd_count = 0;
+    rf->PSH_bwd_count = 0;
+    rf->ACK_count = 0;
+    rf->URG_fwd_count = 0;
+    rf->URG_bwd_count = 0;
+    rf->ECE_count = 0;
+    rf->CWR_count = 0;
+    rf->RST_count = 0;
+    rf->capacity = 10;
+    if (rf->ts_sec) free(rf->ts_sec);
+    if (rf->ts_msec) free(rf->ts_msec);
+    if (rf->payloads_size) free(rf->payloads_size);
+    rf->ts_sec = malloc(sizeof(long) * rf->capacity);
+    rf->ts_msec = malloc(sizeof(long) * rf->capacity);
+    rf->payloads_size = malloc(sizeof(long) * rf->capacity);
+    rf->ts_sec[rf->packet_count] = pkthdr->ts.tv_sec;
+    rf->ts_msec[rf->packet_count] = pkthdr->ts.tv_usec;
+    rf->payloads_size[rf->packet_count] = payload_size;
+    rf->hasFin = false;
+    rf->waitACK = false;
+    if (rf->ts_sec == NULL || rf->ts_msec == NULL || rf->payloads_size == NULL)
+    {
+        if (rf->ts_sec) free(rf->ts_sec);
+        if (rf->ts_msec) free(rf->ts_msec);
+        if (rf->payloads_size) free(rf->payloads_size);
+        perror("there is a problem allocating memory");
+    }
+    rf->fwd++;
+    if (rf->fwd_hdr_min > tcp_hdr_size || rf->fwd_hdr_min == 0)
+        rf->fwd_hdr_min = tcp_hdr_size;
+
+    if (rf->fwd_hdr_max < tcp_hdr_size)
+        rf->fwd_hdr_max = tcp_hdr_size;
+
+    if (rf->fwd_payload_min > payload_size || rf->fwd_payload_min == 0)
+        rf->fwd_payload_min = payload_size;
+
+    if (rf->fwd_payload_max < payload_size)
+        rf->fwd_payload_max = payload_size;
+    rf->fwd_payload_tot += payload_size;
+    if (check_flag(tcp_hdr->th_flags, F_URG))
+    {
+        rf->URG_fwd_count++;
+    }
+    if (check_flag(tcp_hdr->th_flags, F_PSH))
+    {
+        rf->PSH_fwd_count++;
+    }
+    if (check_flag(tcp_hdr->th_flags, F_FIN))
+    {
+        rf->FIN_count++;
+    }
+    if (check_flag(tcp_hdr->th_flags, F_SYN))
+    {
+        rf->SYN_count++;
+    }
+    if (check_flag(tcp_hdr->th_flags, F_RST))
+    {
+        rf->RST_count++;
+    }
+    if (check_flag(tcp_hdr->th_flags, F_ACK))
+    {
+        rf->ACK_count++;
+    }
+    if (check_flag(tcp_hdr->th_flags, F_ECE))
+    {
+        rf->ECE_count++;
+    }
+    if (check_flag(tcp_hdr->th_flags, F_CWR))
+    {
+        rf->CWR_count++;
+    }
+    rf->packet_count++;
 }
 
 #endif

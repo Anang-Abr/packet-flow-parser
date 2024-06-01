@@ -28,4 +28,9 @@ FlowInfo *tcp_generate_new_flow(
     const unsigned char *packet,
     const struct pcap_pkthdr *pkthdr);
 
+void reuse_flow(
+    FlowInfo *rf,
+    const unsigned char *packet,
+    const struct pcap_pkthdr *pkthdr);
+                     
 #endif
