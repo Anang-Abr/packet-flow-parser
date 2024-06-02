@@ -25,6 +25,7 @@ void tcp_update_flow(
     const struct pcap_pkthdr *pkthdr);
 
 FlowInfo *tcp_generate_new_flow(
+    FlowsBuffer *fbs,
     const unsigned char *packet,
     const struct pcap_pkthdr *pkthdr);
 

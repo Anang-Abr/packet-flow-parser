@@ -177,8 +177,7 @@ void tcp_handler(FlowsBuffer *fb, const unsigned char *packet, const struct pcap
         found_flow = dequeue(queueBuffer);
         if (found_flow == NULL)
         {
-            found_flow = tcp_generate_new_flow(packet, pkthdr);
-            fb->flows[fb->count] = *found_flow;
+            tcp_generate_new_flow(fb, packet, pkthdr);
             fb->count++;
         }else{
             // printf("replacing old flow with %d packets\n", found_flow->packet_count);
@@ -201,10 +200,11 @@ void tcp_handler(FlowsBuffer *fb, const unsigned char *packet, const struct pcap
 }
 
 FlowInfo *tcp_generate_new_flow(
+    FlowsBuffer *fbs,
     const unsigned char *packet,
     const struct pcap_pkthdr *pkthdr)
 {
-    FlowInfo *new_flow = (FlowInfo *)malloc(sizeof(FlowInfo));
+    FlowInfo *new_flow = &fbs->flows[fbs->count];
     const struct ip *ip_hdr = (struct ip *)(packet + sizeof(struct ethhdr));
     const struct ethhdr *eth_hdr = (struct ethhdr *)packet;
     const struct tcphdr *tcp_hdr = (struct tcphdr *)(packet + sizeof(struct ethhdr) + ip_hdr->ip_hl * 4);

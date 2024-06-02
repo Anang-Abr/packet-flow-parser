@@ -190,8 +190,8 @@ void freeQueue(QueueBuffer *q)
         next = current->next;
         for(int i = 0 ; i< current->flow->packet_count ; i++){
         }
-        free(current->flow); // Free the FlowInfo structure
-        // free(current);       // Free the node
+        // free(current->flow); // Free the FlowInfo structure
+        free(current);       // Free the node
         current = next;
     }
 
