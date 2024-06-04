@@ -14,8 +14,6 @@ typedef struct
     long *ts_msec;
     int fwd;
     int bwd;
-    int fwd_tot;
-    int bwd_tot;
     int fwd_hdr_min;
     int bwd_hdr_min;
     int fwd_hdr_max;
@@ -59,6 +57,7 @@ typedef struct Node{
 typedef struct Queue{
     Node *front;
     Node *rear;
+    unsigned int count;
 } QueueBuffer;
 
 

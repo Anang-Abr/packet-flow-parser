@@ -33,5 +33,8 @@ void reuse_flow(
     FlowInfo *rf,
     const unsigned char *packet,
     const struct pcap_pkthdr *pkthdr);
-                     
+
+void printFlowInfo(FlowInfo *f);
+void reset_flow(FlowInfo *rf);
+
 #endif

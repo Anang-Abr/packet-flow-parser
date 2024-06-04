@@ -17,94 +17,66 @@ int ARR_SIZE = 100;
 
 int count = 0;
 
+/** TODO
+ * Find why the exported count is higher than tcp captured
+*/
+
 void printFlowInfo(FlowInfo *f)
 {
-    // FILE *fptr;
-    // struct tm ts;
-    // struct tm te;
-    // char start[80];
-    // char end[80];
-    // time_t time_start = f->ts_sec[0];
-    // time_t time_end = f->ts_sec[f->packet_count-1];
-    // cJSON *exportObj = cJSON_CreateObject();
-    // cJSON *ts_sec = cJSON_CreateArray();
-    // cJSON *ts_msec = cJSON_CreateArray();
-    // cJSON *payloads = cJSON_CreateArray();
-    // gmtime_r(&time_start, &ts);
-    // gmtime_r(&time_end, &te);
-    // strftime(start, sizeof(start), "%Y-%m-%d %H:%M:%S", &ts);
-    // strftime(end, sizeof(end), "%Y-%m-%d %H:%M:%S", &te);
-    // if(f->ts_sec) free(f->ts_sec);
-    // if(f->ts_msec) free(f->ts_msec);
-    // if(f->payloads_size) free(f->payloads_size);
-    enqueue(queueBuffer, f);
-    printf("!%d\n", count++);
-    // fptr = fopen("./captured_packets/flow.json", "a");
-    // if(fptr == NULL){
-    //     perror("failed to open the log");
-    // }
+    packet_processed += f->packet_count;
+    if(f->packet_count == 0) packet_processed++;
+    if (
+        fprintf(fptr,
+                "{ \"id\" : %d, \"src_ip\" : \"%s\", \"dst_ip\" : \"%s\",\"src_port\" : %d, \"dst_port\" : %d, \"packet_count\" : %d, \"fwd\" : %d, \"fwd_hdr_min\" : %d, \"fwd_hdr_max\" : %d, \"fwd_payload_min\" : %d, \"fwd_payload_max\" : %d, \"fwd_payload_tot\" : %ld, \"bwd\" : %d, \"bwd_hdr_min\" : %d, \"bwd_hdr_max\" : %d, \"bwd_payload_min\" : %d, \"bwd_payload_max\" : %d, \"bwd_payload_tot\" : %ld, \"FIN_count\" : %d, \"SYN_count\" : %d, \"ACK_count\" : %d, \"ECE_count\" : %d, \"CWR_count\" : %d, \"RST_count\" : %d, \"URG_fwd_count\" : %d, \"URG_bwd_count\" : %d, \"PSH_fwd_count\" : %d, \"PSH_bwd_count\" : %d,\n",
+                ++count, inet_ntoa(f->src_ip), inet_ntoa(f->dst_ip), f->src_port, f->dst_port, f->packet_count, f->fwd, f->fwd_hdr_min, f->fwd_hdr_max, f->fwd_payload_min, f->fwd_payload_max, f->fwd_payload_tot, f->bwd, f->bwd_hdr_min, f->bwd_hdr_max, f->bwd_payload_min, f->bwd_payload_max, f->bwd_payload_tot, f->FIN_count, f->SYN_count, f->ACK_count, f->ECE_count, f->CWR_count, f->RST_count, f->URG_fwd_count, f->URG_bwd_count, f->PSH_fwd_count, f->PSH_bwd_count) < 0)
+    {
+        perror("error writing to file");
+        exit(EXIT_FAILURE);
+    }
+    fprintf(fptr, "  \"ts_sec\": [");
+    for (int i = 0; i < f->packet_count; i++)
+    {
+        fprintf(fptr, "%ld", f->ts_sec[i]);
+        if (i < f->packet_count - 1)
+        {
+            fprintf(fptr, ", ");
+        }
+    }
+    fprintf(fptr, "],\n");
+
+    fprintf(fptr, "  \"ts_msec\": [");
+    for (int i = 0; i < f->packet_count; i++)
+    {
+        fprintf(fptr, "%ld", f->ts_msec[i]);
+        if (i < f->packet_count - 1)
+        {
+            fprintf(fptr, ", ");
+        }
+    }
+    fprintf(fptr, "],\n");
+
+    fprintf(fptr, "  \"payloads\": [");
+    for (int i = 0; i < f->packet_count; i++)
+    {
+        fprintf(fptr, "%zu", f->payloads_size[i]);
+        if (i < f->packet_count - 1)
+        {
+            fprintf(fptr, ", ");
+        }
+    }
+    fprintf(fptr, "]\n");
+
+    fprintf(fptr, "},\n");
     // if (
-    //     fprintf(fptr, "%-3d|%s.%06ld - %s.%06ld|[%-12s:%-5d -> %-12s:%-5d]==>%-6d\n",
-    //     ++count, start, f->ts_msec[0],  end,  f->ts_msec[f->packet_count - 1], inet_ntoa(f->src_ip), f->src_port, inet_ntoa(f->dst_ip), f->dst_port, f->packet_count) < 0)
+    //     fprintf(fptr,
+    //             "{ \"id\" : %d, \"src_ip\" : \"%s\", \"dst_ip\" : \"%s\",\"src_port\" : %d, \"dst_port\" : %d, \"packet_count\" : %d },\n",
+    //             ++count, inet_ntoa(f->src_ip), inet_ntoa(f->dst_ip), f->src_port, f->dst_port, f->packet_count) < 0)
     // {
     //     perror("error writing to file");
+    //     exit(EXIT_FAILURE);
     // }
-
-    //genereate the json value
-    // cJSON_AddStringToObject(exportObj, "src_ip", inet_ntoa(f->src_ip));
-    // cJSON_AddStringToObject(exportObj, "dst_ip", inet_ntoa(f->dst_ip));
-    // cJSON_AddNumberToObject(exportObj, "src_port", f->src_port);
-    // cJSON_AddNumberToObject(exportObj, "dst_port", f->dst_port);
-    // cJSON_AddNumberToObject(exportObj, "protocol", f->protocol);
-    // cJSON_AddNumberToObject(exportObj, "bwd_count", f->bwd);
-    // cJSON_AddNumberToObject(exportObj, "bwd_hdr_max", f->bwd_hdr_max);
-    // cJSON_AddNumberToObject(exportObj, "bwd_hdr_min", f->bwd_hdr_min);
-    // cJSON_AddNumberToObject(exportObj, "bwd_pkts_payload_max", f->bwd_payload_max);
-    // cJSON_AddNumberToObject(exportObj, "bwd_payload_min", f->bwd_payload_min);
-    // cJSON_AddNumberToObject(exportObj, "bwd_payload_tot", f->bwd_payload_tot);
-    // cJSON_AddNumberToObject(exportObj, "bwd_tot", f->bwd_tot);
-    // cJSON_AddNumberToObject(exportObj, "fwd_count", f->fwd);
-    // cJSON_AddNumberToObject(exportObj, "fwd_hdr_max", f->fwd_hdr_max);
-    // cJSON_AddNumberToObject(exportObj, "fwd_hdr_min", f->fwd_hdr_min);
-    // cJSON_AddNumberToObject(exportObj, "fwd_payload_max", f->fwd_payload_max);
-    // cJSON_AddNumberToObject(exportObj, "fwd_payload_min", f->fwd_payload_min);
-    // cJSON_AddNumberToObject(exportObj, "fwd_payload_tot", f->fwd_payload_tot);
-    // cJSON_AddNumberToObject(exportObj, "fwd_tot", f->fwd_tot);
-    // cJSON_AddNumberToObject(exportObj, "ACK_count", f->ACK_count);
-    // cJSON_AddNumberToObject(exportObj, "SYN_count", f->SYN_count);
-    // cJSON_AddNumberToObject(exportObj, "FIN_count", f->FIN_count);
-    // cJSON_AddNumberToObject(exportObj, "ECE_count", f->ECE_count);
-    // cJSON_AddNumberToObject(exportObj, "CWR_count", f->CWR_count);
-    // cJSON_AddNumberToObject(exportObj, "RST_count", f->RST_count);
-    // cJSON_AddNumberToObject(exportObj, "packet_count", f->packet_count);
-
-    // for(int i = 0; i<f->packet_count ; i++){
-    //     if(f->ts_sec != NULL && f->ts_msec && f->payloads_size != NULL){
-    //         cJSON_AddItemToArray(ts_sec, cJSON_CreateNumber(f->ts_sec[i]));
-    //         cJSON_AddItemToArray(ts_msec, cJSON_CreateNumber(f->ts_msec[i]));
-    //         cJSON_AddItemToArray(payloads, cJSON_CreateNumber(f->payloads_size[i]));
-    //     }
-    // }
-    // cJSON_AddItemToObject(exportObj, "ts_sec", ts_sec);
-    // cJSON_AddItemToObject(exportObj, "ts_msec", ts_msec);
-    // cJSON_AddItemToObject(exportObj, "payloads", payloads);
-    // fputs(cJSON_Print(exportObj), fptr);
-    // fprintf(fptr,",");
-    // if (fclose(fptr) != 0)
-    // {
-    //     perror("failed to close the log");
-    // }
-    // free(f->ts_sec);
-    // free(f->ts_msec);
-    // free(f->payloads_size);
-    // cJSON_free(ts_msec);
-    // cJSON_free(ts_sec);
-    // cJSON_free(payloads);
-    // cJSON_free(exportObj);
-    // cJSON_Delete(ts_msec);
-    // cJSON_Delete(ts_sec);
-    // cJSON_Delete(payloads);
-    // cJSON_Delete(exportObj);
+    enqueue(queueBuffer, f);
+    printf("!%d\n", count);
 }
 
 bool check_flag(uint8_t flag, uint8_t compare)
@@ -121,7 +93,6 @@ FlowInfo *find_flow_index(
 {
     FlowInfo *foundFlow = queueSearch(queueBuffer, src_ip, dst_ip, src_port, dst_port);
     if(foundFlow != NULL){
-        // printf("ada di dalam queue buffer");
         return NULL;
     }
     for (int i = 0; i < flowBuffer->count; i++)
@@ -144,7 +115,6 @@ FlowInfo *find_flow_index(
 
 void tcp_handler(FlowsBuffer *fb, const unsigned char *packet, const struct pcap_pkthdr *pkthdr)
 {
-    packet_processed++;
     if (fb->count >= fb->capacity)
     {
         fb->capacity *= 2;
@@ -180,13 +150,6 @@ void tcp_handler(FlowsBuffer *fb, const unsigned char *packet, const struct pcap
             tcp_generate_new_flow(fb, packet, pkthdr);
             fb->count++;
         }else{
-            // printf("replacing old flow with %d packets\n", found_flow->packet_count);
-            if (found_flow->ts_sec != NULL || found_flow->ts_sec != NULL || found_flow->payloads_size != NULL)
-            {
-                // free(found_flow->ts_sec);
-                // free(found_flow->ts_msec);
-                // free(found_flow->payloads_size);
-            }
             reuse_flow(found_flow, packet, pkthdr);
             // printf("to new flow with %d packets\n", found_flow->packet_count);
         }
@@ -219,8 +182,6 @@ FlowInfo *tcp_generate_new_flow(
     new_flow->packet_count = 0;
     new_flow->fwd = 0;
     new_flow->bwd = 0;
-    new_flow->fwd_tot = tcp_hdr->th_off * 4;
-    new_flow->bwd_tot = 0;
     new_flow->fwd_hdr_min = 0;
     new_flow->bwd_hdr_min = 0;
     new_flow->fwd_hdr_max = 0;
@@ -230,6 +191,7 @@ FlowInfo *tcp_generate_new_flow(
     new_flow->bwd_payload_min = 0;
     new_flow->bwd_payload_max = 0;
     new_flow->fwd_payload_tot = 0;
+    new_flow->bwd_payload_tot = 0;
     new_flow->FIN_count = 0;
     new_flow->SYN_count = 0;
     new_flow->PSH_fwd_count = 0;
@@ -247,6 +209,8 @@ FlowInfo *tcp_generate_new_flow(
     new_flow->ts_sec[new_flow->packet_count] = pkthdr->ts.tv_sec;
     new_flow->ts_msec[new_flow->packet_count] = pkthdr->ts.tv_usec;
     new_flow->payloads_size[new_flow->packet_count] = payload_size;
+    new_flow->fwd++;
+    new_flow->packet_count++;
     new_flow->hasFin = false;
     new_flow->waitACK = false;
     if (new_flow->ts_sec == NULL || new_flow->ts_msec == NULL || new_flow->payloads_size == NULL)
@@ -256,8 +220,6 @@ FlowInfo *tcp_generate_new_flow(
         if(new_flow->payloads_size)free(new_flow->payloads_size);
         perror("there is a problem allocating memory");
     }
-
-    new_flow->fwd++;
     if (new_flow->fwd_hdr_min > tcp_hdr_size || new_flow->fwd_hdr_min == 0)
         new_flow->fwd_hdr_min = tcp_hdr_size;
 
@@ -282,9 +244,6 @@ FlowInfo *tcp_generate_new_flow(
     if (check_flag(tcp_hdr->th_flags, F_SYN)){
         new_flow->SYN_count++;
     }
-    if (check_flag(tcp_hdr->th_flags, F_RST)){
-        new_flow->RST_count++;
-    }
     if (check_flag(tcp_hdr->th_flags, F_ACK)){
         new_flow->ACK_count++;
     }
@@ -294,7 +253,10 @@ FlowInfo *tcp_generate_new_flow(
     if (check_flag(tcp_hdr->th_flags, F_CWR)){
         new_flow->CWR_count++;
     }
-    new_flow->packet_count++;
+    if (check_flag(tcp_hdr->th_flags, F_RST)){
+        new_flow->RST_count++;
+        printFlowInfo(new_flow);
+    }
     return new_flow;
 }
 
@@ -405,6 +367,7 @@ void tcp_update_flow(
         if (check_flag(tcp_hdr->th_flags, F_RST))
         {
             flow->RST_count++;
+            printFlowInfo(flow);
         }
         if (check_flag(tcp_hdr->th_flags, F_ECE))
         {
@@ -463,10 +426,6 @@ void tcp_update_flow(
         {
             flow->SYN_count++;
         }
-        if (check_flag(tcp_hdr->th_flags, F_RST))
-        {
-            flow->RST_count++;
-        }
         if (check_flag(tcp_hdr->th_flags, F_ECE))
         {
             flow->ECE_count++;
@@ -474,6 +433,11 @@ void tcp_update_flow(
         if (check_flag(tcp_hdr->th_flags, F_CWR))
         {
             flow->CWR_count++;
+        }
+        if (check_flag(tcp_hdr->th_flags, F_RST))
+        {
+            flow->RST_count++;
+            printFlowInfo(flow);
         }
     }
 }
@@ -497,8 +461,6 @@ void reuse_flow(
     rf->packet_count = 0;
     rf->fwd = 0;
     rf->bwd = 0;
-    rf->fwd_tot = tcp_hdr->th_off * 4;
-    rf->bwd_tot = 0;
     rf->fwd_hdr_min = 0;
     rf->bwd_hdr_min = 0;
     rf->fwd_hdr_max = 0;
@@ -528,6 +490,14 @@ void reuse_flow(
     rf->ts_sec[rf->packet_count] = pkthdr->ts.tv_sec;
     rf->ts_msec[rf->packet_count] = pkthdr->ts.tv_usec;
     rf->payloads_size[rf->packet_count] = payload_size;
+    if (check_flag(tcp_hdr->th_flags, F_RST))
+    {
+        printf("ini spesial nih");
+        printf("%ld\n", pkthdr->ts.tv_sec);
+        printf("%ld\n", pkthdr->ts.tv_usec);
+        printf("%d\n", payload_size);
+    }
+    rf->packet_count++;
     rf->hasFin = false;
     rf->waitACK = false;
     if (rf->ts_sec == NULL || rf->ts_msec == NULL || rf->payloads_size == NULL)
@@ -566,10 +536,6 @@ void reuse_flow(
     {
         rf->SYN_count++;
     }
-    if (check_flag(tcp_hdr->th_flags, F_RST))
-    {
-        rf->RST_count++;
-    }
     if (check_flag(tcp_hdr->th_flags, F_ACK))
     {
         rf->ACK_count++;
@@ -582,7 +548,68 @@ void reuse_flow(
     {
         rf->CWR_count++;
     }
-    rf->packet_count++;
+    if (check_flag(tcp_hdr->th_flags, F_RST))
+    {
+        rf->RST_count++;
+        printFlowInfo(rf);
+    }
+}
+
+void reset_flow(FlowInfo *rf){
+    rf->packet_count = 0;
+    rf->fwd = 0;
+    rf->bwd = 0;
+
+    // Reset header and payload sizes
+    rf->fwd_hdr_min = 0;
+    rf->bwd_hdr_min = 0;
+    rf->fwd_hdr_max = 0;
+    rf->bwd_hdr_max = 0;
+    rf->fwd_payload_min = 0;
+    rf->fwd_payload_max = 0;
+    rf->bwd_payload_min = 0;
+    rf->bwd_payload_max = 0;
+    rf->fwd_payload_tot = 0;
+    rf->bwd_payload_tot = 0;
+
+    // Reset flag counts
+    rf->FIN_count = 0;
+    rf->SYN_count = 0;
+    rf->PSH_fwd_count = 0;
+    rf->PSH_bwd_count = 0;
+    rf->ACK_count = 0;
+    rf->URG_fwd_count = 0;
+    rf->URG_bwd_count = 0;
+    rf->ECE_count = 0;
+    rf->CWR_count = 0;
+    rf->RST_count = 0;
+
+    // Free dynamic memory and reset capacity
+    if (rf->ts_sec)
+        free(rf->ts_sec);
+    if (rf->ts_msec)
+        free(rf->ts_msec);
+    if (rf->payloads_size)
+        free(rf->payloads_size);
+    rf->capacity = 10;
+    rf->ts_sec = malloc(sizeof(long) * rf->capacity);
+    rf->ts_msec = malloc(sizeof(long) * rf->capacity);
+    rf->payloads_size = malloc(sizeof(long) * rf->capacity);
+    if (rf->ts_sec == NULL || rf->ts_msec == NULL || rf->payloads_size == NULL)
+    {
+        if (rf->ts_sec)
+            free(rf->ts_sec);
+        if (rf->ts_msec)
+            free(rf->ts_msec);
+        if (rf->payloads_size)
+            free(rf->payloads_size);
+        perror("Error allocating memory");
+        rf->ts_sec = NULL;
+        rf->ts_msec = NULL;
+        rf->payloads_size = NULL;
+    }
+    rf->hasFin = false;
+    rf->waitACK = false;
 }
 
 #endif
