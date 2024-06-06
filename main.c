@@ -43,36 +43,49 @@ unsigned int found_in_queue = 0;
 
 /**
  * TODO
- * ? Install zeek flowmeter
+ * add params options to select network interface, export file name, and mode(optional)
  */
-void handle_sigint(){
-    printf("\n=== sigint");
+
+/**
+ * Handle Signal Interupt, flush all the flows stored in the flow buffer
+ */
+void handle_sigint()
+{
     for (int i = 0; i < flowBuffer->count; i++)
     {
+        // checking if the flow already in the queueBuffer
         FlowInfo *is_queued = queueSearch(queueBuffer, flowBuffer->flows[i].src_ip, flowBuffer->flows[i].dst_ip, flowBuffer->flows[i].src_port, flowBuffer->flows[i].dst_port);
 
-        // printf("now processing: %d\n", ntohs(flowBuffer->flows[i].src_port));
-        // printf("now processing: %d\n", ntohs(flowBuffer->flows[i].dst_port));
+        if (is_queued != NULL)
+            found_in_queue++;
+        // if flow isn't yet stored in the queue buffer, export the flow
+        else if (is_queued == NULL)
+            printFlowInfo(&flowBuffer->flows[i]);
 
-        if(is_queued != NULL) found_in_queue++;
-        else if(is_queued == NULL) printFlowInfo(&flowBuffer->flows[i]);
-        if(flowBuffer->flows[i].payloads_size != NULL){
+        // free the memory for the dynamic array
+        if (flowBuffer->flows[i].payloads_size != NULL)
+        {
             free(flowBuffer->flows[i].payloads_size);
         }
-        if(flowBuffer->flows[i].ts_msec != NULL){
+        if (flowBuffer->flows[i].ts_msec != NULL)
+        {
             free(flowBuffer->flows[i].ts_msec);
         }
-        if(flowBuffer->flows[i].ts_sec != NULL){
+        if (flowBuffer->flows[i].ts_sec != NULL)
+        {
             free(flowBuffer->flows[i].ts_sec);
         }
         flow_buffer_count++;
     }
 
+    // printing captured count
     printf("packet received(without filter) : %ld\n", packet_received);
     printf("packet count(tcp filtered): %ld\n", packet_count);
     printf("packet processed(exported): %ld\n", packet_processed);
     printf("packet in queue : %d\n", queueBuffer->count);
     printf("packet in buffer: %d\n", flow_buffer_count);
+
+    // cleanup
     freeQueue(queueBuffer);
     free(flowBuffer->flows);
     free(flowBuffer);
@@ -90,10 +103,12 @@ int main(int argc, char **argv)
     flowBuffer = (FlowsBuffer *)malloc(sizeof(FlowsBuffer));
     queueBuffer = (QueueBuffer *)malloc(sizeof(QueueBuffer));
     initQueue(queueBuffer);
-    if(flowBuffer == NULL){
+    if (flowBuffer == NULL)
+    {
         perror("error allocating memory for flow buffer");
     }
-    if(queueBuffer == NULL){
+    if (queueBuffer == NULL)
+    {
         perror("error allocating memory for flow buffer");
     }
     initFlowBuffer(flowBuffer, 10);
@@ -118,6 +133,7 @@ int main(int argc, char **argv)
     return 0;
 }
 
+// handling the packet listener
 void packet_handler(unsigned char *user_data, const struct pcap_pkthdr *pkthdr, const unsigned char *packet)
 {
     // PROTOCOL TCP
@@ -133,7 +149,8 @@ void packet_handler(unsigned char *user_data, const struct pcap_pkthdr *pkthdr, 
 void initFlowBuffer(FlowsBuffer *fbs, unsigned int initSize)
 {
     fbs->flows = (FlowInfo *)malloc(sizeof(FlowInfo) * initSize);
-    if(fbs->flows == NULL){
+    if (fbs->flows == NULL)
+    {
         free(fbs);
         perror("error allocating memory\n");
     }
@@ -147,6 +164,7 @@ void initQueue(QueueBuffer *q)
     q->count = 0;
 }
 
+// push into queue
 void enqueue(QueueBuffer *q, FlowInfo *flow)
 {
     Node *newNode = (Node *)malloc(sizeof(Node));
@@ -171,6 +189,7 @@ void enqueue(QueueBuffer *q, FlowInfo *flow)
     q->rear = newNode;
 }
 
+// poping the queue
 FlowInfo *dequeue(QueueBuffer *q)
 {
     if (q->front == NULL)
@@ -193,6 +212,7 @@ FlowInfo *dequeue(QueueBuffer *q)
     return value;
 }
 
+// search flow in the queue
 FlowInfo *queueSearch(QueueBuffer *q, struct in_addr ip_src, struct in_addr ip_dst, uint16_t src_port, uint16_t dst_port)
 {
     Node *current = q->front;
@@ -213,6 +233,7 @@ FlowInfo *queueSearch(QueueBuffer *q, struct in_addr ip_src, struct in_addr ip_d
     return NULL; // If no match is found
 }
 
+// clean up memory allocation in the queue
 void freeQueue(QueueBuffer *q)
 {
     Node *current = q->front;
@@ -222,7 +243,7 @@ void freeQueue(QueueBuffer *q)
     {
         next = current->next;
         // free(current->flow); // Free the FlowInfo structure
-        free(current);       // Free the node
+        free(current); // Free the node
         current = next;
     }
 

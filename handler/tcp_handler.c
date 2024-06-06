@@ -19,20 +19,28 @@ int count = 0;
 
 /** TODO
  * Find why the exported count is higher than tcp captured
-*/
+ */
 
+// exporting the flow info to the output file
 void printFlowInfo(FlowInfo *f)
 {
     packet_processed += f->packet_count;
-    if(f->packet_count == 0) packet_processed++;
+    if (f->packet_count == 0)
+        packet_processed++;
+    char src_ip[INET_ADDRSTRLEN];
+    char dst_ip[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &(f->src_ip), src_ip, INET_ADDRSTRLEN);
+    inet_ntop(AF_INET, &(f->dst_ip), dst_ip, INET_ADDRSTRLEN);
+    printf("%s == %s\n", src_ip, dst_ip);
     if (
         fprintf(fptr,
                 "{ \"id\" : %d, \"src_ip\" : \"%s\", \"dst_ip\" : \"%s\",\"src_port\" : %d, \"dst_port\" : %d, \"packet_count\" : %d, \"fwd\" : %d, \"fwd_hdr_min\" : %d, \"fwd_hdr_max\" : %d, \"fwd_payload_min\" : %d, \"fwd_payload_max\" : %d, \"fwd_payload_tot\" : %ld, \"bwd\" : %d, \"bwd_hdr_min\" : %d, \"bwd_hdr_max\" : %d, \"bwd_payload_min\" : %d, \"bwd_payload_max\" : %d, \"bwd_payload_tot\" : %ld, \"FIN_count\" : %d, \"SYN_count\" : %d, \"ACK_count\" : %d, \"ECE_count\" : %d, \"CWR_count\" : %d, \"RST_count\" : %d, \"URG_fwd_count\" : %d, \"URG_bwd_count\" : %d, \"PSH_fwd_count\" : %d, \"PSH_bwd_count\" : %d,\n",
-                ++count, inet_ntoa(f->src_ip), inet_ntoa(f->dst_ip), f->src_port, f->dst_port, f->packet_count, f->fwd, f->fwd_hdr_min, f->fwd_hdr_max, f->fwd_payload_min, f->fwd_payload_max, f->fwd_payload_tot, f->bwd, f->bwd_hdr_min, f->bwd_hdr_max, f->bwd_payload_min, f->bwd_payload_max, f->bwd_payload_tot, f->FIN_count, f->SYN_count, f->ACK_count, f->ECE_count, f->CWR_count, f->RST_count, f->URG_fwd_count, f->URG_bwd_count, f->PSH_fwd_count, f->PSH_bwd_count) < 0)
+                ++count, src_ip, dst_ip, f->src_port, f->dst_port, f->packet_count, f->fwd, f->fwd_hdr_min, f->fwd_hdr_max, f->fwd_payload_min, f->fwd_payload_max, f->fwd_payload_tot, f->bwd, f->bwd_hdr_min, f->bwd_hdr_max, f->bwd_payload_min, f->bwd_payload_max, f->bwd_payload_tot, f->FIN_count, f->SYN_count, f->ACK_count, f->ECE_count, f->CWR_count, f->RST_count, f->URG_fwd_count, f->URG_bwd_count, f->PSH_fwd_count, f->PSH_bwd_count) < 0)
     {
         perror("error writing to file");
         exit(EXIT_FAILURE);
     }
+
     fprintf(fptr, "  \"ts_sec\": [");
     for (int i = 0; i < f->packet_count; i++)
     {
@@ -79,11 +87,13 @@ void printFlowInfo(FlowInfo *f)
     printf("!%d\n", count);
 }
 
+// check the tcp flag
 bool check_flag(uint8_t flag, uint8_t compare)
 {
     return ((flag & compare) > 0);
 }
 
+// find flow in the flow buffer
 FlowInfo *find_flow_index(
     FlowsBuffer *flowBuffer,
     const struct in_addr src_ip,
@@ -92,7 +102,8 @@ FlowInfo *find_flow_index(
     const uint16_t dst_port)
 {
     FlowInfo *foundFlow = queueSearch(queueBuffer, src_ip, dst_ip, src_port, dst_port);
-    if(foundFlow != NULL){
+    if (foundFlow != NULL)
+    {
         return NULL;
     }
     for (int i = 0; i < flowBuffer->count; i++)
@@ -119,22 +130,22 @@ void tcp_handler(FlowsBuffer *fb, const unsigned char *packet, const struct pcap
     {
         fb->capacity *= 2;
         FlowInfo *temp_flows = realloc(fb->flows, sizeof(FlowInfo) * fb->capacity);
-    
-    // Check if reallocation was successful
-    if (temp_flows == NULL)
-    {
-        // Handle reallocation failure
-        
-        // Free the original pointer
-        free(fb->flows);
-        
-        // You might choose to exit here or handle the error in another way
-        perror("Failed to reallocate memory for FlowsBuffer");
-        exit(EXIT_FAILURE);
-    }
-    
-    // Assign the reallocated memory back to the original pointer
-    fb->flows = temp_flows;
+
+        // Check if reallocation was successful
+        if (temp_flows == NULL)
+        {
+            // Handle reallocation failure
+
+            // Free the original pointer
+            free(fb->flows);
+
+            // You might choose to exit here or handle the error in another way
+            perror("Failed to reallocate memory for FlowsBuffer");
+            exit(EXIT_FAILURE);
+        }
+
+        // Assign the reallocated memory back to the original pointer
+        fb->flows = temp_flows;
     }
     const struct ip *ip_header = (struct ip *)(packet + sizeof(struct ethhdr));
     const struct ethhdr *eth_header = (struct ethhdr *)packet;
@@ -149,7 +160,9 @@ void tcp_handler(FlowsBuffer *fb, const unsigned char *packet, const struct pcap
         {
             tcp_generate_new_flow(fb, packet, pkthdr);
             fb->count++;
-        }else{
+        }
+        else
+        {
             reuse_flow(found_flow, packet, pkthdr);
             // printf("to new flow with %d packets\n", found_flow->packet_count);
         }
@@ -215,9 +228,12 @@ FlowInfo *tcp_generate_new_flow(
     new_flow->waitACK = false;
     if (new_flow->ts_sec == NULL || new_flow->ts_msec == NULL || new_flow->payloads_size == NULL)
     {
-        if(new_flow->ts_sec)free(new_flow->ts_sec);
-        if(new_flow->ts_msec)free(new_flow->ts_msec);
-        if(new_flow->payloads_size)free(new_flow->payloads_size);
+        if (new_flow->ts_sec)
+            free(new_flow->ts_sec);
+        if (new_flow->ts_msec)
+            free(new_flow->ts_msec);
+        if (new_flow->payloads_size)
+            free(new_flow->payloads_size);
         perror("there is a problem allocating memory");
     }
     if (new_flow->fwd_hdr_min > tcp_hdr_size || new_flow->fwd_hdr_min == 0)
@@ -232,28 +248,36 @@ FlowInfo *tcp_generate_new_flow(
     if (new_flow->fwd_payload_max < payload_size)
         new_flow->fwd_payload_max = payload_size;
     new_flow->fwd_payload_tot += payload_size;
-    if (check_flag(tcp_hdr->th_flags, F_URG)){
+    if (check_flag(tcp_hdr->th_flags, F_URG))
+    {
         new_flow->URG_fwd_count++;
     }
-    if (check_flag(tcp_hdr->th_flags, F_PSH)){
+    if (check_flag(tcp_hdr->th_flags, F_PSH))
+    {
         new_flow->PSH_fwd_count++;
     }
-    if (check_flag(tcp_hdr->th_flags, F_FIN)){
+    if (check_flag(tcp_hdr->th_flags, F_FIN))
+    {
         new_flow->FIN_count++;
     }
-    if (check_flag(tcp_hdr->th_flags, F_SYN)){
+    if (check_flag(tcp_hdr->th_flags, F_SYN))
+    {
         new_flow->SYN_count++;
     }
-    if (check_flag(tcp_hdr->th_flags, F_ACK)){
+    if (check_flag(tcp_hdr->th_flags, F_ACK))
+    {
         new_flow->ACK_count++;
     }
-    if (check_flag(tcp_hdr->th_flags, F_ECE)){
+    if (check_flag(tcp_hdr->th_flags, F_ECE))
+    {
         new_flow->ECE_count++;
     }
-    if (check_flag(tcp_hdr->th_flags, F_CWR)){
+    if (check_flag(tcp_hdr->th_flags, F_CWR))
+    {
         new_flow->CWR_count++;
     }
-    if (check_flag(tcp_hdr->th_flags, F_RST)){
+    if (check_flag(tcp_hdr->th_flags, F_RST))
+    {
         new_flow->RST_count++;
         printFlowInfo(new_flow);
     }
@@ -333,7 +357,7 @@ void tcp_update_flow(
         if (flow->fwd_payload_max < payload_size)
             flow->fwd_payload_max = payload_size;
 
-        flow->fwd_payload_tot+= payload_size;
+        flow->fwd_payload_tot += payload_size;
         if (check_flag(tcp_hdr->th_flags, F_ACK))
         {
             flow->ACK_count++;
@@ -354,7 +378,8 @@ void tcp_update_flow(
         if (check_flag(tcp_hdr->th_flags, F_FIN))
         {
             flow->FIN_count++;
-            if(flow->hasFin){
+            if (flow->hasFin)
+            {
                 // printFlowInfo(flow);
                 flow->waitACK = true;
             }
@@ -392,7 +417,7 @@ void tcp_update_flow(
 
         if (flow->bwd_payload_max < payload_size)
             flow->bwd_payload_max = payload_size;
-        
+
         flow->bwd_payload_tot += payload_size;
 
         if (check_flag(tcp_hdr->th_flags, F_ACK))
@@ -481,9 +506,12 @@ void reuse_flow(
     rf->CWR_count = 0;
     rf->RST_count = 0;
     rf->capacity = 10;
-    if (rf->ts_sec) free(rf->ts_sec);
-    if (rf->ts_msec) free(rf->ts_msec);
-    if (rf->payloads_size) free(rf->payloads_size);
+    if (rf->ts_sec)
+        free(rf->ts_sec);
+    if (rf->ts_msec)
+        free(rf->ts_msec);
+    if (rf->payloads_size)
+        free(rf->payloads_size);
     rf->ts_sec = malloc(sizeof(long) * rf->capacity);
     rf->ts_msec = malloc(sizeof(long) * rf->capacity);
     rf->payloads_size = malloc(sizeof(long) * rf->capacity);
@@ -502,9 +530,12 @@ void reuse_flow(
     rf->waitACK = false;
     if (rf->ts_sec == NULL || rf->ts_msec == NULL || rf->payloads_size == NULL)
     {
-        if (rf->ts_sec) free(rf->ts_sec);
-        if (rf->ts_msec) free(rf->ts_msec);
-        if (rf->payloads_size) free(rf->payloads_size);
+        if (rf->ts_sec)
+            free(rf->ts_sec);
+        if (rf->ts_msec)
+            free(rf->ts_msec);
+        if (rf->payloads_size)
+            free(rf->payloads_size);
         perror("there is a problem allocating memory");
     }
     rf->fwd++;
@@ -555,7 +586,8 @@ void reuse_flow(
     }
 }
 
-void reset_flow(FlowInfo *rf){
+void reset_flow(FlowInfo *rf)
+{
     rf->packet_count = 0;
     rf->fwd = 0;
     rf->bwd = 0;
