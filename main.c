@@ -6,10 +6,11 @@
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
 #include <arpa/inet.h>
+#include <net/if.h>
+#include <time.h>
 #include "utils/cJSON.h"
 #include "utils/cJSON.c"
-#include <time.h>
-#include <assert.h>
+#include <getopt.h>
 #include <signal.h>
 #include "flow.h"
 #include "./handler/handler.h"
@@ -22,9 +23,6 @@ unsigned int flow_count = 0;
 unsigned long packet_count = 0;
 unsigned long packet_received = 0;
 unsigned long packet_processed = 0;
-char protocol = 'O';
-unsigned int tcp_flow = 0;
-unsigned int udp_flow = 0;
 pcap_dumper_t *pcap_dumper;
 FlowsBuffer *flowBuffer;
 QueueBuffer *queueBuffer;
@@ -37,6 +35,7 @@ void enqueue(QueueBuffer *q, FlowInfo *flow);
 FlowInfo *dequeue(QueueBuffer *q);
 FlowInfo *queueSearch(QueueBuffer *q, struct in_addr ip_src, struct in_addr ip_dst, uint16_t src_port, uint16_t dst_port);
 void freeQueue(QueueBuffer *q);
+void handle_sigint();
 
 unsigned int flow_buffer_count = 0;
 unsigned int found_in_queue = 0;
@@ -49,60 +48,61 @@ unsigned int found_in_queue = 0;
 /**
  * Handle Signal Interupt, flush all the flows stored in the flow buffer
  */
-void handle_sigint()
+
+void print_usage(const char *prog_name)
 {
-    for (int i = 0; i < flowBuffer->count; i++)
-    {
-        // checking if the flow already in the queueBuffer
-        FlowInfo *is_queued = queueSearch(queueBuffer, flowBuffer->flows[i].src_ip, flowBuffer->flows[i].dst_ip, flowBuffer->flows[i].src_port, flowBuffer->flows[i].dst_port);
-
-        if (is_queued != NULL)
-            found_in_queue++;
-        // if flow isn't yet stored in the queue buffer, export the flow
-        else if (is_queued == NULL)
-            printFlowInfo(&flowBuffer->flows[i]);
-
-        // free the memory for the dynamic array
-        if (flowBuffer->flows[i].payloads_size != NULL)
-        {
-            free(flowBuffer->flows[i].payloads_size);
-        }
-        if (flowBuffer->flows[i].ts_msec != NULL)
-        {
-            free(flowBuffer->flows[i].ts_msec);
-        }
-        if (flowBuffer->flows[i].ts_sec != NULL)
-        {
-            free(flowBuffer->flows[i].ts_sec);
-        }
-        flow_buffer_count++;
-    }
-
-    // printing captured count
-    printf("packet received(without filter) : %ld\n", packet_received);
-    printf("packet count(tcp filtered): %ld\n", packet_count);
-    printf("packet processed(exported): %ld\n", packet_processed);
-    printf("packet in queue : %d\n", queueBuffer->count);
-    printf("packet in buffer: %d\n", flow_buffer_count);
-
-    // cleanup
-    freeQueue(queueBuffer);
-    free(flowBuffer->flows);
-    free(flowBuffer);
-    if (fclose(fptr) != 0)
-    {
-        perror("failed to close the log");
-    }
-    exit(EXIT_SUCCESS);
+    fprintf(stderr, "Usage: %s -i <interface> \n", prog_name);
+    fprintf(stderr, "  -i, --interface <interface>  : Specify the network interface\n");
+    exit(EXIT_FAILURE);
 }
 
-int main(int argc, char **argv)
+int check_interface(const char *interface)
 {
+    return if_nametoindex(interface) != 0;
+}
+
+int main(int argc, char *argv[])
+{
+    int opt;
+    char *interface = NULL;
+    char *export_file = NULL;
+    while((opt = getopt(argc, argv, "i:e:h")) != -1){
+        switch(opt){
+            case 'i':
+                interface = optarg;
+                break;
+            case 'e':
+                export_file = optarg;
+                break;
+            case 'h':
+                print_usage(argv[0]);
+            default:
+                print_usage(argv[0]);
+
+        }
+    }
+
+    if (interface == NULL)
+    {
+        perror("network interface should be specified\n");
+        exit(EXIT_FAILURE);
+    }
+    if (!check_interface(interface))
+    {
+        perror("the specified interface not found\n");
+        exit(EXIT_FAILURE);
+    }
+    if (export_file == NULL)
+    {
+        perror("network interface should be specified\n");
+        exit(EXIT_FAILURE);
+    }
+
     signal(SIGINT, handle_sigint);
-    pcap_t *handle;
     flowBuffer = (FlowsBuffer *)malloc(sizeof(FlowsBuffer));
     queueBuffer = (QueueBuffer *)malloc(sizeof(QueueBuffer));
     initQueue(queueBuffer);
+    pcap_t *handle;
     if (flowBuffer == NULL)
     {
         perror("error allocating memory for flow buffer");
@@ -113,13 +113,15 @@ int main(int argc, char **argv)
     }
     initFlowBuffer(flowBuffer, 10);
     char errbuf[PCAP_ERRBUF_SIZE];
-    fptr = fopen("./captured_packets/flow.json", "a");
+    fptr = fopen(export_file, "a");
     if (fptr == NULL)
     {
         perror("failed to open the log");
         exit(EXIT_FAILURE);
     }
-    handle = pcap_open_live("eth0", BUFSIZ, 1, 1000, errbuf);
+    
+
+    handle = pcap_open_live(interface, BUFSIZ, 1, 1000, errbuf);
     if (handle == NULL)
     {
         printf("Error opening device: %s\n", errbuf);
@@ -127,8 +129,6 @@ int main(int argc, char **argv)
     }
     pcap_loop(handle, 0, packet_handler, (unsigned char *)flowBuffer);
     pcap_close(handle);
-    printf("Total UDP Flowss: %d\n", udp_flow);
-    printf("Total TCP Flows: %d\n", tcp_flow);
     fclose;
     return 0;
 }
@@ -220,10 +220,14 @@ FlowInfo *queueSearch(QueueBuffer *q, struct in_addr ip_src, struct in_addr ip_d
     while (current != NULL)
     {
         // printf("\n%d == %d\n", ntohs(current->flow->src_port), ntohs(src_port));
-        if (current->flow->src_ip.s_addr == ip_src.s_addr &&
-            current->flow->dst_ip.s_addr == ip_dst.s_addr &&
-            current->flow->src_port == src_port &&
-            current->flow->dst_port == dst_port)
+        if ((current->flow->src_ip.s_addr == ip_src.s_addr &&
+             current->flow->dst_ip.s_addr == ip_dst.s_addr &&
+             current->flow->src_port == src_port &&
+             current->flow->dst_port == dst_port) ||
+            current->flow->src_ip.s_addr == ip_dst.s_addr &&
+                current->flow->dst_ip.s_addr == ip_src.s_addr &&
+                current->flow->src_port == dst_port &&
+                current->flow->dst_port == src_port)
         {
             // printf("found");
             return current->flow;
@@ -250,4 +254,51 @@ void freeQueue(QueueBuffer *q)
     // Finally, reset the queue pointers
     q->front = q->rear = NULL;
     free(q);
+}
+
+void handle_sigint()
+{
+    for (int i = 0; i < flowBuffer->count; i++)
+    {
+        // checking if the flow already in the queueBuffer
+        FlowInfo *is_queued = queueSearch(queueBuffer, flowBuffer->flows[i].src_ip, flowBuffer->flows[i].dst_ip, flowBuffer->flows[i].src_port, flowBuffer->flows[i].dst_port);
+
+        if (is_queued != NULL)
+            found_in_queue++;
+        // if flow isn't yet stored in the queue buffer, export the flow
+        else if (is_queued == NULL)
+            printFlowInfo(&flowBuffer->flows[i]);
+
+        // free the memory for the dynamic array
+        if (flowBuffer->flows[i].payloads_size != NULL)
+        {
+            free(flowBuffer->flows[i].payloads_size);
+        }
+        if (flowBuffer->flows[i].ts_msec != NULL)
+        {
+            free(flowBuffer->flows[i].ts_msec);
+        }
+        if (flowBuffer->flows[i].ts_sec != NULL)
+        {
+            free(flowBuffer->flows[i].ts_sec);
+        }
+        flow_buffer_count++;
+    }
+
+    // printing captured count
+    printf("packet received(without filter) : %ld\n", packet_received);
+    printf("packet count(tcp filtered): %ld\n", packet_count);
+    printf("packet processed(exported): %ld\n", packet_processed);
+    printf("packet in queue : %d\n", queueBuffer->count);
+    printf("packet in buffer: %d\n", flow_buffer_count);
+
+    // cleanup
+    freeQueue(queueBuffer);
+    free(flowBuffer->flows);
+    free(flowBuffer);
+    if (fclose(fptr) != 0)
+    {
+        perror("failed to close the log");
+    }
+    exit(EXIT_SUCCESS);
 }

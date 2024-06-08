@@ -279,6 +279,9 @@ FlowInfo *tcp_generate_new_flow(
     if (check_flag(tcp_hdr->th_flags, F_RST))
     {
         new_flow->RST_count++;
+    }
+    if (check_flag(tcp_hdr->th_flags, F_RST))
+    {
         printFlowInfo(new_flow);
     }
     return new_flow;
@@ -298,6 +301,7 @@ void tcp_update_flow(
     bool is_fwd = flow->src_ip.s_addr == ip_hdr->ip_src.s_addr;
     int flow_packet_count = flow->packet_count;
     flow->packet_count++;
+    bool exported = false;
     if (flow_packet_count >= flow->capacity)
     {
         // allocate new size
@@ -358,15 +362,6 @@ void tcp_update_flow(
             flow->fwd_payload_max = payload_size;
 
         flow->fwd_payload_tot += payload_size;
-        if (check_flag(tcp_hdr->th_flags, F_ACK))
-        {
-            flow->ACK_count++;
-            // printf("ACK\n");
-            if (flow->waitACK)
-            {
-                printFlowInfo(flow);
-            }
-        }
         if (check_flag(tcp_hdr->th_flags, F_URG))
         {
             flow->URG_fwd_count++;
@@ -375,24 +370,9 @@ void tcp_update_flow(
         {
             flow->PSH_fwd_count++;
         }
-        if (check_flag(tcp_hdr->th_flags, F_FIN))
-        {
-            flow->FIN_count++;
-            if (flow->hasFin)
-            {
-                // printFlowInfo(flow);
-                flow->waitACK = true;
-            }
-            flow->hasFin = true;
-        }
         if (check_flag(tcp_hdr->th_flags, F_SYN))
         {
             flow->SYN_count++;
-        }
-        if (check_flag(tcp_hdr->th_flags, F_RST))
-        {
-            flow->RST_count++;
-            printFlowInfo(flow);
         }
         if (check_flag(tcp_hdr->th_flags, F_ECE))
         {
@@ -402,6 +382,39 @@ void tcp_update_flow(
         {
             flow->CWR_count++;
         }
+        if (check_flag(tcp_hdr->th_flags, F_ACK))
+        {
+            flow->ACK_count++;
+        }
+        if (check_flag(tcp_hdr->th_flags, F_FIN))
+        {
+            flow->FIN_count++;
+        }
+        if (check_flag(tcp_hdr->th_flags, F_RST))
+        {
+            flow->RST_count++;
+        }
+        if (check_flag(tcp_hdr->th_flags, F_ACK))
+        {
+            if (flow->waitACK)
+            {
+                printFlowInfo(flow);
+                return;
+            }
+        }
+        if (check_flag(tcp_hdr->th_flags, F_FIN))
+        {
+            if (flow->hasFin)
+            {
+                flow->waitACK = true;
+            }
+            flow->hasFin = true;
+        }
+        if (check_flag(tcp_hdr->th_flags, F_RST))
+        {
+            printFlowInfo(flow);
+            return;
+        }  
     }
     else
     {
@@ -420,14 +433,7 @@ void tcp_update_flow(
 
         flow->bwd_payload_tot += payload_size;
 
-        if (check_flag(tcp_hdr->th_flags, F_ACK))
-        {
-            flow->ACK_count++;
-            if (flow->waitACK)
-            {
-                printFlowInfo(flow);
-            }
-        }
+        
         if (check_flag(tcp_hdr->th_flags, F_URG))
         {
             flow->URG_fwd_count++;
@@ -435,17 +441,6 @@ void tcp_update_flow(
         if (check_flag(tcp_hdr->th_flags, F_PSH))
         {
             flow->PSH_fwd_count++;
-        }
-        if (check_flag(tcp_hdr->th_flags, F_FIN))
-        {
-            flow->FIN_count++;
-            flow->FIN_count++;
-            if (flow->hasFin)
-            {
-                // printFlowInfo(flow);
-                flow->waitACK = true;
-            }
-            flow->hasFin = true;
         }
         if (check_flag(tcp_hdr->th_flags, F_SYN))
         {
@@ -459,10 +454,38 @@ void tcp_update_flow(
         {
             flow->CWR_count++;
         }
+        if (check_flag(tcp_hdr->th_flags, F_ACK))
+        {
+            flow->ACK_count++;
+        }
+        if (check_flag(tcp_hdr->th_flags, F_FIN))
+        {
+            flow->FIN_count++;
+        }
         if (check_flag(tcp_hdr->th_flags, F_RST))
         {
             flow->RST_count++;
+        }
+        if (check_flag(tcp_hdr->th_flags, F_ACK))
+        {
+            if (flow->waitACK)
+            {
+                printFlowInfo(flow);
+                return;
+            }
+        }
+        if (check_flag(tcp_hdr->th_flags, F_FIN))
+        {
+            if (flow->hasFin)
+            {
+                flow->waitACK = true;
+            }
+            flow->hasFin = true;
+        }
+        if (check_flag(tcp_hdr->th_flags, F_RST))
+        {
             printFlowInfo(flow);
+            return;
         }
     }
 }
@@ -582,6 +605,9 @@ void reuse_flow(
     if (check_flag(tcp_hdr->th_flags, F_RST))
     {
         rf->RST_count++;
+    }
+    if (check_flag(tcp_hdr->th_flags, F_RST))
+    {
         printFlowInfo(rf);
     }
 }

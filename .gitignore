@@ -3,5 +3,6 @@
 *.txt
 /captured_packets
 /sandbox
+/scripts
 /.vs
 app
