@@ -94,7 +94,7 @@ int main(int argc, char *argv[])
     }
     if (export_file == NULL)
     {
-        perror("network interface should be specified\n");
+        perror("export file target should be specified\n");
         exit(EXIT_FAILURE);
     }
 
@@ -121,7 +121,7 @@ int main(int argc, char *argv[])
     }
     
 
-    handle = pcap_open_live(interface, BUFSIZ, 1, 1000, errbuf);
+    handle = pcap_open_live(interface, BUFSIZ*2, 1, 1000, errbuf);
     if (handle == NULL)
     {
         printf("Error opening device: %s\n", errbuf);

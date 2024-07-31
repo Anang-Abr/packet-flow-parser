@@ -31,7 +31,6 @@ void printFlowInfo(FlowInfo *f)
     char dst_ip[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &(f->src_ip), src_ip, INET_ADDRSTRLEN);
     inet_ntop(AF_INET, &(f->dst_ip), dst_ip, INET_ADDRSTRLEN);
-    printf("%s == %s\n", src_ip, dst_ip);
     if (
         fprintf(fptr,
                 "{ \"id\" : %d, \"src_ip\" : \"%s\", \"dst_ip\" : \"%s\",\"src_port\" : %d, \"dst_port\" : %d, \"packet_count\" : %d, \"fwd\" : %d, \"fwd_hdr_min\" : %d, \"fwd_hdr_max\" : %d, \"fwd_payload_min\" : %d, \"fwd_payload_max\" : %d, \"fwd_payload_tot\" : %ld, \"bwd\" : %d, \"bwd_hdr_min\" : %d, \"bwd_hdr_max\" : %d, \"bwd_payload_min\" : %d, \"bwd_payload_max\" : %d, \"bwd_payload_tot\" : %ld, \"FIN_count\" : %d, \"SYN_count\" : %d, \"ACK_count\" : %d, \"ECE_count\" : %d, \"CWR_count\" : %d, \"RST_count\" : %d, \"URG_fwd_count\" : %d, \"URG_bwd_count\" : %d, \"PSH_fwd_count\" : %d, \"PSH_bwd_count\" : %d,\n",
@@ -541,13 +540,6 @@ void reuse_flow(
     rf->ts_sec[rf->packet_count] = pkthdr->ts.tv_sec;
     rf->ts_msec[rf->packet_count] = pkthdr->ts.tv_usec;
     rf->payloads_size[rf->packet_count] = payload_size;
-    if (check_flag(tcp_hdr->th_flags, F_RST))
-    {
-        printf("ini spesial nih");
-        printf("%ld\n", pkthdr->ts.tv_sec);
-        printf("%ld\n", pkthdr->ts.tv_usec);
-        printf("%d\n", payload_size);
-    }
     rf->packet_count++;
     rf->hasFin = false;
     rf->waitACK = false;
@@ -614,6 +606,10 @@ void reuse_flow(
 
 void reset_flow(FlowInfo *rf)
 {
+    rf->src_ip.s_addr = 0;
+    rf->dst_ip.s_addr = 0;
+    rf->src_port = 0;
+    rf->dst_port = 0;
     rf->packet_count = 0;
     rf->fwd = 0;
     rf->bwd = 0;
