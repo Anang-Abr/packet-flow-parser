@@ -27,6 +27,7 @@ pcap_dumper_t *pcap_dumper;
 FlowsBuffer *flowBuffer;
 QueueBuffer *queueBuffer;
 FILE *fptr;
+int count = 0;
 
 void packet_handler(unsigned char *user_data, const struct pcap_pkthdr *pkthdr, const unsigned char *packet);
 void initFlowBuffer(FlowsBuffer *fbs, unsigned int initSize);
@@ -40,14 +41,6 @@ void handle_sigint();
 unsigned int flow_buffer_count = 0;
 unsigned int found_in_queue = 0;
 
-/**
- * TODO
- * add params options to select network interface, export file name, and mode(optional)
- */
-
-/**
- * Handle Signal Interupt, flush all the flows stored in the flow buffer
- */
 
 void print_usage(const char *prog_name)
 {
@@ -92,11 +85,6 @@ int main(int argc, char *argv[])
         perror("the specified interface not found\n");
         exit(EXIT_FAILURE);
     }
-    if (export_file == NULL)
-    {
-        perror("export file target should be specified\n");
-        exit(EXIT_FAILURE);
-    }
 
     signal(SIGINT, handle_sigint);
     flowBuffer = (FlowsBuffer *)malloc(sizeof(FlowsBuffer));
@@ -113,11 +101,13 @@ int main(int argc, char *argv[])
     }
     initFlowBuffer(flowBuffer, 10);
     char errbuf[PCAP_ERRBUF_SIZE];
+    if(export_file != NULL){
     fptr = fopen(export_file, "a");
     if (fptr == NULL)
     {
         perror("failed to open the log");
         exit(EXIT_FAILURE);
+    }
     }
     
 
@@ -164,7 +154,6 @@ void initQueue(QueueBuffer *q)
     q->count = 0;
 }
 
-// push into queue
 void enqueue(QueueBuffer *q, FlowInfo *flow)
 {
     Node *newNode = (Node *)malloc(sizeof(Node));
@@ -173,7 +162,6 @@ void enqueue(QueueBuffer *q, FlowInfo *flow)
         printf("Memory allocation failed\n");
         return;
     }
-    // printf("enqueue port: %d\n", ntohs(flow->src_port));
     reset_flow(flow);
     newNode->flow = flow;
     newNode->next = NULL;
@@ -189,12 +177,10 @@ void enqueue(QueueBuffer *q, FlowInfo *flow)
     q->rear = newNode;
 }
 
-// poping the queue
 FlowInfo *dequeue(QueueBuffer *q)
 {
     if (q->front == NULL)
     {
-        // printf("Queue is empty\n");
         return NULL;
     }
 
@@ -212,14 +198,12 @@ FlowInfo *dequeue(QueueBuffer *q)
     return value;
 }
 
-// search flow in the queue
 FlowInfo *queueSearch(QueueBuffer *q, struct in_addr ip_src, struct in_addr ip_dst, uint16_t src_port, uint16_t dst_port)
 {
     Node *current = q->front;
 
     while (current != NULL)
     {
-        // printf("\n%d == %d\n", ntohs(current->flow->src_port), ntohs(src_port));
         if ((current->flow->src_ip.s_addr == ip_src.s_addr &&
              current->flow->dst_ip.s_addr == ip_dst.s_addr &&
              current->flow->src_port == src_port &&
@@ -229,15 +213,13 @@ FlowInfo *queueSearch(QueueBuffer *q, struct in_addr ip_src, struct in_addr ip_d
                 current->flow->src_port == dst_port &&
                 current->flow->dst_port == src_port)
         {
-            // printf("found");
             return current->flow;
         }
         current = current->next;
     }
-    return NULL; // If no match is found
+    return NULL;
 }
 
-// clean up memory allocation in the queue
 void freeQueue(QueueBuffer *q)
 {
     Node *current = q->front;
@@ -246,12 +228,9 @@ void freeQueue(QueueBuffer *q)
     while (current != NULL)
     {
         next = current->next;
-        // free(current->flow); // Free the FlowInfo structure
-        free(current); // Free the node
+        free(current);
         current = next;
     }
-
-    // Finally, reset the queue pointers
     q->front = q->rear = NULL;
     free(q);
 }
@@ -291,14 +270,18 @@ void handle_sigint()
     printf("packet processed(exported): %ld\n", packet_processed);
     printf("packet in queue : %d\n", queueBuffer->count);
     printf("packet in buffer: %d\n", flow_buffer_count);
+    printf("flows count: %d\n", count);
+
 
     // cleanup
     freeQueue(queueBuffer);
     free(flowBuffer->flows);
     free(flowBuffer);
-    if (fclose(fptr) != 0)
-    {
-        perror("failed to close the log");
+    if(fptr != NULL){
+        if (fclose(fptr) != 0)
+        {
+            perror("failed to close the log");
+        }
     }
     exit(EXIT_SUCCESS);
 }

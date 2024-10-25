@@ -15,7 +15,6 @@
 
 int ARR_SIZE = 100;
 
-int count = 0;
 
 /** TODO
  * Find why the exported count is higher than tcp captured
@@ -31,59 +30,99 @@ void printFlowInfo(FlowInfo *f)
     char dst_ip[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &(f->src_ip), src_ip, INET_ADDRSTRLEN);
     inet_ntop(AF_INET, &(f->dst_ip), dst_ip, INET_ADDRSTRLEN);
-    if (
-        fprintf(fptr,
+    if (fptr != NULL)
+    {
+        if (
+            fprintf(fptr,
+                    "{ \"id\" : %d, \"src_ip\" : \"%s\", \"dst_ip\" : \"%s\",\"src_port\" : %d, \"dst_port\" : %d, \"packet_count\" : %d, \"fwd\" : %d, \"fwd_hdr_min\" : %d, \"fwd_hdr_max\" : %d, \"fwd_payload_min\" : %d, \"fwd_payload_max\" : %d, \"fwd_payload_tot\" : %ld, \"bwd\" : %d, \"bwd_hdr_min\" : %d, \"bwd_hdr_max\" : %d, \"bwd_payload_min\" : %d, \"bwd_payload_max\" : %d, \"bwd_payload_tot\" : %ld, \"FIN_count\" : %d, \"SYN_count\" : %d, \"ACK_count\" : %d, \"ECE_count\" : %d, \"CWR_count\" : %d, \"RST_count\" : %d, \"URG_fwd_count\" : %d, \"URG_bwd_count\" : %d, \"PSH_fwd_count\" : %d, \"PSH_bwd_count\" : %d,\n",
+                    ++count, src_ip, dst_ip, f->src_port, f->dst_port, f->packet_count, f->fwd, f->fwd_hdr_min, f->fwd_hdr_max, f->fwd_payload_min, f->fwd_payload_max, f->fwd_payload_tot, f->bwd, f->bwd_hdr_min, f->bwd_hdr_max, f->bwd_payload_min, f->bwd_payload_max, f->bwd_payload_tot, f->FIN_count, f->SYN_count, f->ACK_count, f->ECE_count, f->CWR_count, f->RST_count, f->URG_fwd_count, f->URG_bwd_count, f->PSH_fwd_count, f->PSH_bwd_count) < 0)
+        {
+            perror("error writing to file");
+            exit(EXIT_FAILURE);
+        }
+
+        fprintf(fptr, "  \"ts_sec\": [");
+        for (int i = 0; i < f->packet_count; i++)
+        {
+            fprintf(fptr, "%ld", f->ts_sec[i]);
+            if (i < f->packet_count - 1)
+            {
+                fprintf(fptr, ", ");
+            }
+        }
+        fprintf(fptr, "],\n");
+
+        fprintf(fptr, "  \"ts_msec\": [");
+        for (int i = 0; i < f->packet_count; i++)
+        {
+            fprintf(fptr, "%ld", f->ts_msec[i]);
+            if (i < f->packet_count - 1)
+            {
+                fprintf(fptr, ", ");
+            }
+        }
+        fprintf(fptr, "],\n");
+
+        fprintf(fptr, "  \"payloads\": [");
+        for (int i = 0; i < f->packet_count; i++)
+        {
+            fprintf(fptr, "%zu", f->payloads_size[i]);
+            if (i < f->packet_count - 1)
+            {
+                fprintf(fptr, ", ");
+            }
+        }
+        fprintf(fptr, "]\n");
+
+        fprintf(fptr, "},\n");
+    }
+    else
+    {
+        if (
+            printf(
                 "{ \"id\" : %d, \"src_ip\" : \"%s\", \"dst_ip\" : \"%s\",\"src_port\" : %d, \"dst_port\" : %d, \"packet_count\" : %d, \"fwd\" : %d, \"fwd_hdr_min\" : %d, \"fwd_hdr_max\" : %d, \"fwd_payload_min\" : %d, \"fwd_payload_max\" : %d, \"fwd_payload_tot\" : %ld, \"bwd\" : %d, \"bwd_hdr_min\" : %d, \"bwd_hdr_max\" : %d, \"bwd_payload_min\" : %d, \"bwd_payload_max\" : %d, \"bwd_payload_tot\" : %ld, \"FIN_count\" : %d, \"SYN_count\" : %d, \"ACK_count\" : %d, \"ECE_count\" : %d, \"CWR_count\" : %d, \"RST_count\" : %d, \"URG_fwd_count\" : %d, \"URG_bwd_count\" : %d, \"PSH_fwd_count\" : %d, \"PSH_bwd_count\" : %d,\n",
                 ++count, src_ip, dst_ip, f->src_port, f->dst_port, f->packet_count, f->fwd, f->fwd_hdr_min, f->fwd_hdr_max, f->fwd_payload_min, f->fwd_payload_max, f->fwd_payload_tot, f->bwd, f->bwd_hdr_min, f->bwd_hdr_max, f->bwd_payload_min, f->bwd_payload_max, f->bwd_payload_tot, f->FIN_count, f->SYN_count, f->ACK_count, f->ECE_count, f->CWR_count, f->RST_count, f->URG_fwd_count, f->URG_bwd_count, f->PSH_fwd_count, f->PSH_bwd_count) < 0)
-    {
-        perror("error writing to file");
-        exit(EXIT_FAILURE);
-    }
-
-    fprintf(fptr, "  \"ts_sec\": [");
-    for (int i = 0; i < f->packet_count; i++)
-    {
-        fprintf(fptr, "%ld", f->ts_sec[i]);
-        if (i < f->packet_count - 1)
         {
-            fprintf(fptr, ", ");
+            perror("error writing to file");
+            exit(EXIT_FAILURE);
         }
-    }
-    fprintf(fptr, "],\n");
 
-    fprintf(fptr, "  \"ts_msec\": [");
-    for (int i = 0; i < f->packet_count; i++)
-    {
-        fprintf(fptr, "%ld", f->ts_msec[i]);
-        if (i < f->packet_count - 1)
+        printf("  \"ts_sec\": [");
+        for (int i = 0; i < f->packet_count; i++)
         {
-            fprintf(fptr, ", ");
+            printf( "%ld", f->ts_sec[i]);
+            if (i < f->packet_count - 1)
+            {
+                printf( ", ");
+            }
         }
-    }
-    fprintf(fptr, "],\n");
+        printf( "],\n");
 
-    fprintf(fptr, "  \"payloads\": [");
-    for (int i = 0; i < f->packet_count; i++)
-    {
-        fprintf(fptr, "%zu", f->payloads_size[i]);
-        if (i < f->packet_count - 1)
+        printf( "  \"ts_msec\": [");
+        for (int i = 0; i < f->packet_count; i++)
         {
-            fprintf(fptr, ", ");
+            printf( "%ld", f->ts_msec[i]);
+            if (i < f->packet_count - 1)
+            {
+                printf( ", ");
+            }
         }
-    }
-    fprintf(fptr, "]\n");
+        printf( "],\n");
 
-    fprintf(fptr, "},\n");
-    // if (
-    //     fprintf(fptr,
-    //             "{ \"id\" : %d, \"src_ip\" : \"%s\", \"dst_ip\" : \"%s\",\"src_port\" : %d, \"dst_port\" : %d, \"packet_count\" : %d },\n",
-    //             ++count, inet_ntoa(f->src_ip), inet_ntoa(f->dst_ip), f->src_port, f->dst_port, f->packet_count) < 0)
-    // {
-    //     perror("error writing to file");
-    //     exit(EXIT_FAILURE);
-    // }
+        printf( "  \"payloads\": [");
+        for (int i = 0; i < f->packet_count; i++)
+        {
+            printf( "%zu", f->payloads_size[i]);
+            if (i < f->packet_count - 1)
+            {
+                printf( ", ");
+            }
+        }
+        printf( "]\n");
+
+        printf( "},\n");
+    }
     enqueue(queueBuffer, f);
-    printf("!%d\n", count);
 }
 
 // check the tcp flag
@@ -163,14 +202,12 @@ void tcp_handler(FlowsBuffer *fb, const unsigned char *packet, const struct pcap
         else
         {
             reuse_flow(found_flow, packet, pkthdr);
-            // printf("to new flow with %d packets\n", found_flow->packet_count);
         }
     }
     // when the same flow is found, update flow information
     else
     {
         tcp_update_flow(found_flow, packet, pkthdr);
-        // printf("new packet added to flow, current packets: %d\n", found_flow->packet_count);
     }
 }
 
@@ -305,7 +342,6 @@ void tcp_update_flow(
     {
         // allocate new size
         flow->capacity *= 2;
-        // printf("allocating memory for : %d byte", flow->packet_count * 2);
         long *temp_ts_sec = realloc(flow->ts_sec, sizeof(long) * flow->capacity);
         long *temp_ts_msec = realloc(flow->ts_msec, sizeof(long) * flow->capacity);
         long *temp_payloads_size = realloc(flow->payloads_size, sizeof(long) * flow->capacity);
@@ -413,7 +449,7 @@ void tcp_update_flow(
         {
             printFlowInfo(flow);
             return;
-        }  
+        }
     }
     else
     {
@@ -432,7 +468,6 @@ void tcp_update_flow(
 
         flow->bwd_payload_tot += payload_size;
 
-        
         if (check_flag(tcp_hdr->th_flags, F_URG))
         {
             flow->URG_fwd_count++;
@@ -614,7 +649,6 @@ void reset_flow(FlowInfo *rf)
     rf->fwd = 0;
     rf->bwd = 0;
 
-    // Reset header and payload sizes
     rf->fwd_hdr_min = 0;
     rf->bwd_hdr_min = 0;
     rf->fwd_hdr_max = 0;
@@ -626,7 +660,6 @@ void reset_flow(FlowInfo *rf)
     rf->fwd_payload_tot = 0;
     rf->bwd_payload_tot = 0;
 
-    // Reset flag counts
     rf->FIN_count = 0;
     rf->SYN_count = 0;
     rf->PSH_fwd_count = 0;
@@ -638,7 +671,6 @@ void reset_flow(FlowInfo *rf)
     rf->CWR_count = 0;
     rf->RST_count = 0;
 
-    // Free dynamic memory and reset capacity
     if (rf->ts_sec)
         free(rf->ts_sec);
     if (rf->ts_msec)

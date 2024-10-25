@@ -10,5 +10,6 @@ extern unsigned long packet_received;
 extern unsigned long packet_processed;
 
 extern FILE *fptr;
+extern int count;
 
 #endif
