@@ -2,3 +2,9 @@
 *.pcap
 *.txt
 /captured_packets
+/sandbox
+/scripts
+/.vs
+/graph
+/test
+app

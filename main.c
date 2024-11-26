@@ -1,451 +1,320 @@
 #include <stdio.h>
+#include <stdbool.h>
+#include <omp.h>
 #include <pcap.h>
 #include <netinet/ip.h>
 #include <netinet/ether.h>
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
 #include <arpa/inet.h>
-#include "cJSON.h"
-#include "cJSON.c"
+#include <net/if.h>
 #include <time.h>
-#include <assert.h>
+#include "utils/cJSON.h"
+#include "utils/cJSON.c"
+#include <getopt.h>
+#include <time.h>
+#include <signal.h>
+#include <unistd.h>
+#include "flow.h"
+#include "./handler/handler.h"
+#include "main.h"
 
-#define MAX_FLOWS 50
-#define MAX_PACKETS 50
+#define MAX_FLOWS 10
+#define MAX_PACKETS 30
+#define FLOW_TIMEOUT 5
 
-
-typedef struct
-{
-    struct in_addr src_ip;
-    struct in_addr dst_ip;
-    uint16_t src_port;
-    uint16_t dst_port;
-    int packet_count;
-    char protocol;
-    time_t ts_start;
-    time_t ts_last;
-    time_t tms_start;
-    time_t tms_last;
-    int fwd_tot;
-    int bwd_tot;
-    int flow_FIN_flag_count;
-    int flow_SYN_flag_count;
-    int flow_RST_flag_count;
-    int bwd_PSH_flag_count;
-    int fwd_PSH_flag_count;
-    int flow_ACK_flag_count;
-    int flow_CWR_flag_count;
-    int flow_ECE_flag_count;
-    int fwd_URG_flag_count;
-    int bwd_URG_flag_count;
-    int fwd_pkts_payload_min;
-    int fwd_pkts_payload_max;
-    int fwd_pkts_payload_tot;
-    int fwd_pkts_payload_std;
-    int bwd_pkts_payload_min;
-    int bwd_pkts_payload_max;
-    int bwd_pkts_payload_tot;
-    int bwd_pkts_payload_std;
-    int flow_pkts_payload_min;
-    int flow_pkts_payload_max;
-    int flow_pkts_payload_tot;
-    int flow_pkts_payload_std;
-    int pkt_array[50];
-} FlowInfo;
-
-FlowInfo flows[MAX_FLOWS];
-int flow_count = 0;
-int packet_count = 0;
-char protocol = 'O';
-int tcp_flow = 0;
-int udp_flow = 0;
+unsigned int flow_count = 0;
+unsigned long packet_count = 0;
+unsigned long packet_received = 0;
+unsigned long packet_processed = 0;
 pcap_dumper_t *pcap_dumper;
+FlowsBuffer *flowBuffer;
+QueueBuffer *queueBuffer;
+FILE *fptr;
+int count = 0;
 
-void process_packet(const u_char *packet, int payload_offset, int payload_length)
+void packet_handler(unsigned char *user_data, const struct pcap_pkthdr *pkthdr, const unsigned char *packet);
+void initFlowBuffer(FlowsBuffer *fbs, unsigned int initSize);
+void initQueue(QueueBuffer *q);
+void enqueue(QueueBuffer *q, FlowInfo *flow);
+FlowInfo *dequeue(QueueBuffer *q);
+FlowInfo *queueSearch(QueueBuffer *q, struct in_addr ip_src, struct in_addr ip_dst, uint16_t src_port, uint16_t dst_port);
+void freeQueue(QueueBuffer *q);
+void handle_sigint();
+void timeoutCheck(FlowsBuffer *flowBuffer);
+
+unsigned int flow_buffer_count = 0;
+unsigned int found_in_queue = 0;
+
+
+void print_usage(const char *prog_name)
 {
-    printf("Payload: ");
-    for (int i = payload_offset; i < payload_offset + payload_length; ++i)
-    {
-        printf("%02x ", packet[i]);
-    }
-    printf("\n");
+    fprintf(stderr, "Usage: %s -i <interface> \n", prog_name);
+    fprintf(stderr, "  -i, --interface <interface>  : Specify the network interface\n");
+    exit(EXIT_FAILURE);
 }
 
-int find_flow_index(
-    const struct in_addr src_ip,
-    const struct in_addr dst_ip,
-    const uint16_t src_port,
-    const uint16_t dst_port)
+int check_interface(const char *interface)
 {
-    for (int i = 0; i < flow_count; i++)
-    {
-        if ((
-                flows[i].src_ip.s_addr == src_ip.s_addr &&
-                flows[i].dst_ip.s_addr == dst_ip.s_addr &&
-                flows[i].src_port == src_port &&
-                flows[i].dst_port == dst_port) ||
-            (flows[i].src_ip.s_addr == dst_ip.s_addr &&
-             flows[i].dst_ip.s_addr == src_ip.s_addr &&
-             flows[i].src_port == dst_port &&
-             flows[i].dst_port == src_port))
-        {
-            return i;
-        }
-    }
-    return -1;
+    return if_nametoindex(interface) != 0;
 }
 
-void tcp_handler(const struct pcap_pkthdr *pkthdr, const unsigned char *packet){
-    const struct ip *ip_header = (struct ip *)(packet + sizeof(struct ethhdr));
-    const struct ethhdr *eth_header = (struct ethhdr *)packet;
-    const struct tcphdr *tcp_header = (struct tcphdr *)(packet + sizeof(struct ethhdr) + ip_header->ip_hl * 4);
-    char src_ip[INET_ADDRSTRLEN];
-    char dst_ip[INET_ADDRSTRLEN];
-    printf("Packet captured\n");
-    printf("Packet length: %d\n", pkthdr->len);
-    printf("pkthdr length: %ld\n", sizeof(struct pcap_pkthdr));
-    printf("Payload size pcap_pkthdr: %ld\n", pkthdr->len - sizeof(struct pcap_pkthdr));
-    printf("Payload size ethhdr: %ld\n", pkthdr->len - sizeof(struct ethhdr));
-    printf("Payload size ip_header: %ld\n", pkthdr->len - sizeof(ip_header));
-    printf("Payload size ip_header: %ld\n", pkthdr->len - (sizeof(ip_header) + sizeof(struct ethhdr) + sizeof(struct pcap_pkthdr) + sizeof(struct tcphdr)));
-    inet_ntop(AF_INET, &(ip_header->ip_src), src_ip, INET_ADDRSTRLEN);
-    inet_ntop(AF_INET, &(ip_header->ip_dst), dst_ip, INET_ADDRSTRLEN);
-    char *src_eth = ether_ntoa((const struct ether_addr *)eth_header->h_source);
-    char *dst_eth = ether_ntoa((const struct ether_addr *)eth_header->h_dest);
-    printf("Source Host: %s\n", src_eth);
-    printf("Destination Host: %s\n", dst_eth);
-    printf("Layer 2 protocol: %d\n", eth_header->h_proto);
-    printf("Source IP: %s\n", src_ip);
-    printf("Destination Ip: %s\n", dst_ip);
-    printf("TTL : %d\n", ip_header->ip_ttl);
-    printf("TOS: %d\n", ip_header->ip_tos);
-
-    printf("Payload size ip_header: %ld\n", pkthdr->len - (sizeof(struct ip) + sizeof(struct ethhdr) + sizeof(struct pcap_pkthdr) + sizeof(struct tcphdr)));
-    printf("Source Port: %d\n", ntohs(tcp_header->th_sport));
-    printf("Destination Port: %d\n", ntohs(tcp_header->th_dport));
-    printf("TCP Flags: 0x%X\n", tcp_header->th_flags);
-    printf("TCP Window: %02X\n", tcp_header->th_win);
-    printf("TCP checksum:%02X\n", tcp_header->th_sum);
-    printf("TCP urgent pointer: %02X\n", tcp_header->th_urp);
-    printf("Protocol: TCP\n");
-    int flow_index = find_flow_index(ip_header->ip_src, ip_header->ip_dst, ntohs(tcp_header->th_sport), ntohs(tcp_header->th_dport));
-    // new flow generated
-    if (flow_index == -1)
-    {
-        if (flow_count < MAX_FLOWS)
-        {
-            flows[flow_count].src_ip = ip_header->ip_src;
-            flows[flow_count].dst_ip = ip_header->ip_dst;
-            flows[flow_count].src_port = ntohs(tcp_header->th_sport);
-            flows[flow_count].dst_port = ntohs(tcp_header->th_dport);
-            flows[flow_count].packet_count = 1;
-            flows[flow_count].protocol = 'T';
-            flows[flow_count].ts_start = pkthdr->ts.tv_sec;
-            flows[flow_count].ts_last = pkthdr->ts.tv_sec;
-            flows[flow_count].tms_start = pkthdr->ts.tv_usec;
-            flows[flow_count].tms_last = pkthdr->ts.tv_usec;
-            flows[flow_count].fwd_tot = 1;
-            flows[flow_count].bwd_tot = 0;
-            flows[flow_count].flow_ACK_flag_count = 0;
-            flows[flow_count].flow_CWR_flag_count = 0;
-            flows[flow_count].flow_ECE_flag_count = 0;
-            flows[flow_count].flow_FIN_flag_count = 0;
-            flows[flow_count].flow_RST_flag_count = 0;
-            flows[flow_count].flow_SYN_flag_count = 0;
-            flows[flow_count].pkt_array[flows[flow_count].packet_count-1] = pkthdr->len - sizeof(struct ethhdr);
-            printf("packet ke- %d\n", flows[flow_count].packet_count);
-            printf("array item: %ld\n", (pkthdr->len - sizeof(struct ethhdr)));
-            switch (tcp_header->th_flags)
-            {
-            case 0x01:
-                printf("FIN");
+int main(int argc, char *argv[])
+{
+    
+    int opt;
+    char *interface = NULL;
+    char *export_file = NULL;
+    while((opt = getopt(argc, argv, "i:e:h")) != -1){
+        switch(opt){
+            case 'i':
+                interface = optarg;
                 break;
-            case 0x02:
-                printf("SYN");
+            case 'e':
+                export_file = optarg;
                 break;
-            case 0x04:
-                printf("RST");
-                break;
-            case 0x08:
-                printf("PSH");
-                break;
-            case 0x10:
-                printf("ACK");
-                break;
-            case 0x20:
-                printf("URG");
-                break;
-            case 0x40:
-                printf("ECE");
-                break;
-            case 0x80:
-                printf("CWR");
-                break;
-            case 0x11:
-                printf("ACKFIN");
-                break;
+            case 'h':
+                print_usage(argv[0]);
             default:
-                printf("DEFAULT:%X", tcp_header->th_flags);
-                break;
+                print_usage(argv[0]);
+
+        }
+    }
+
+    if (interface == NULL)
+    {
+        perror("network interface should be specified\n");
+        exit(EXIT_FAILURE);
+    }
+    if (!check_interface(interface))
+    {
+        perror("the specified interface not found\n");
+        exit(EXIT_FAILURE);
+    }
+
+    signal(SIGINT, handle_sigint);
+    flowBuffer = (FlowsBuffer *)malloc(sizeof(FlowsBuffer));
+    queueBuffer = (QueueBuffer *)malloc(sizeof(QueueBuffer));
+    initQueue(queueBuffer);
+    pcap_t *handle;
+    if (flowBuffer == NULL)
+    {
+        perror("error allocating memory for flow buffer");
+    }
+    if (queueBuffer == NULL)
+    {
+        perror("error allocating memory for flow buffer");
+    }
+    initFlowBuffer(flowBuffer, 10);
+    char errbuf[PCAP_ERRBUF_SIZE];
+    if(export_file != NULL){
+    fptr = fopen(export_file, "a");
+    if (fptr == NULL)
+    {
+        perror("failed to open the log");
+        exit(EXIT_FAILURE);
+    }
+    }
+    #pragma omp parallel sections
+    {
+        #pragma omp section
+        {
+            while (1)
+            {
+                timeoutCheck(flowBuffer);
+                sleep(1);
             }
-            printf("timestamp masuknya flow: %ld\n", pkthdr->ts.tv_usec);
-            flow_count++;
         }
-        else
-        {
-            printf("Max flow count reached. Cannot add a new flow.\n");
-        }
-    }
 
-    // update found flow
-    else
-    {
-        flows[flow_index].packet_count++;
-        flows[flow_index].ts_last = pkthdr->ts.tv_sec;
-        flows[flow_index].tms_last = pkthdr->ts.tv_usec;
-        flows[flow_index].tms_start = flows[flow_index].tms_start;
-        flows[flow_index].pkt_array[flows[flow_index].packet_count-1] = pkthdr->len - sizeof(struct ethhdr);
-        printf("packet ke- %d\n", flows[flow_index].packet_count);
-        printf("array item: %ld\n", (pkthdr->len - sizeof(struct ethhdr)));
-        switch (tcp_header->th_flags)
+        #pragma omp section
         {
-        case 0x01:
-            printf("FIN");
-            break;
-        case 0x02:
-            printf("SYN");
-            break;
-        case 0x04:
-            printf("RST");
-            break;
-        case 0x08:
-            printf("PSH");
-            break;
-        case 0x10:
-            printf("ACK");
-            break;
-        case 0x20:
-            printf("URG");
-            break;
-        case 0x40:
-            printf("ECE");
-            break;
-        case 0x80:
-            printf("CWR");
-            break;
-        case 0x11:
-            printf("ACKFIN");
-            break;
-        default:
-            printf("DEFAULT:%X", tcp_header->th_flags);
-            break;
-        }
-        // categorize between forward and backward packet
-        if (flows[flow_index].src_ip.s_addr == ip_header->ip_src.s_addr)
-        {
-            flows[flow_index].fwd_tot++;
-        }
-        else
-        {
-            flows[flow_index].bwd_tot++;
+            handle = pcap_open_live(interface, BUFSIZ * 2, 1, 1000, errbuf);
+            if (handle == NULL)
+            {
+                printf("Error opening device: %s\n", errbuf);
+                exit(EXIT_SUCCESS);
+            }
+            pcap_loop(handle, 0, packet_handler, (unsigned char *)flowBuffer);
+            pcap_close(handle);
+            fclose;
         }
     }
-    return;
+    return 0;
 }
 
-void print_flow_info(int index){
-    printf("Index %d:\n", index);
-    printf("Flow %d:\n", index + 1);
-    printf("Source IP: %s\n", inet_ntoa(flows[index].src_ip));
-    printf("Destination IP: %s\n", inet_ntoa(flows[index].dst_ip));
-    printf("Port Numbers: %d, %d\n", flows[index].src_port, flows[index].dst_port);
-    printf("Packet Count: %d\n", flows[index].packet_count);
-    printf("Protocol: %c\n", flows[index].protocol);
-    printf("Timestamp(sec) start: %ld\n", flows[index].ts_start);
-    printf("Timestamp(sec) last : %ld\n", flows[index].ts_last);
-    printf("Timestamp(ms) start: %ld\n", flows[index].tms_start);
-    printf("Timestamp(ms) last : %ld\n", flows[index].tms_last);
-    printf("Forward :%d\n", flows[index].fwd_tot);
-    printf("Bacward :%d\n", flows[index].bwd_tot);
-    printf("packet count : %d\n", flows[index].packet_count);
-    printf("array: [");
-    for (int j = 0; j < sizeof(flows[index].pkt_array) / sizeof(int); j++)
+void timeoutCheck(FlowsBuffer *flowBuffer)
+{
+    time_t currentTime = time(NULL);
+    for (int i = 0; i < flowBuffer->count; i++)
     {
-        printf("%d,",flows[index].pkt_array[j]);
-    }
-    printf("]\n");
-    return;
-}
-
-void udp_handler(const struct pcap_pkthdr *pkthdr, const unsigned char *packet){
-    const struct ethhdr *eth_header = (struct ethhdr *)packet;
-    const struct ip *ip_header = (struct ip *)(packet + sizeof(struct ethhdr));
-    char src_ip[INET_ADDRSTRLEN];
-    char dst_ip[INET_ADDRSTRLEN];
-    printf("Packet captured\n");
-    printf("Packet length: %d\n", pkthdr->len);
-    printf("pkthdr length: %ld\n", sizeof(struct pcap_pkthdr));
-    printf("Payload size pcap_pkthdr: %ld\n", pkthdr->len - sizeof(struct pcap_pkthdr));
-    printf("Payload size ethhdr: %ld\n", pkthdr->len - sizeof(struct ethhdr));
-    printf("Payload size ip_header: %ld\n", pkthdr->len - sizeof(ip_header));
-    printf("Payload size ip_header: %ld\n", pkthdr->len - (sizeof(ip_header) + sizeof(struct ethhdr) + sizeof(struct pcap_pkthdr) + sizeof(struct tcphdr)));
-    inet_ntop(AF_INET, &(ip_header->ip_src), src_ip, INET_ADDRSTRLEN);
-    inet_ntop(AF_INET, &(ip_header->ip_dst), dst_ip, INET_ADDRSTRLEN);
-    char *src_eth = ether_ntoa((const struct ether_addr *)eth_header->h_source);
-    char *dst_eth = ether_ntoa((const struct ether_addr *)eth_header->h_dest);
-    printf("Source Host: %s\n", src_eth);
-    printf("Destination Host: %s\n", dst_eth);
-    printf("Layer 2 protocol: %d\n", eth_header->h_proto);
-    printf("Source IP: %s\n", src_ip);
-    printf("Destination Ip: %s\n", dst_ip);
-    printf("TTL : %d\n", ip_header->ip_ttl);
-    printf("TOS: %d\n", ip_header->ip_tos);
-    const struct udphdr *udp_header = (struct udphdr *)(packet + sizeof(struct ethhdr) + ip_header->ip_hl * 4);
-    printf("Source Port: %d\n", ntohs(udp_header->uh_sport));
-    printf("Destination Port: %d\n", ntohs(udp_header->uh_dport));
-    printf("Protocol: UDP\n");
-    int flow_index = find_flow_index(ip_header->ip_src, ip_header->ip_dst, ntohs(udp_header->uh_sport), ntohs(udp_header->uh_dport));
-    // membuat flow baru
-    if (flow_index == -1)
-    {
-        if (flow_count < MAX_FLOWS)
+        double timeDiff = difftime(currentTime, flowBuffer->flows[i].last_updated);
+        if (timeDiff > FLOW_TIMEOUT && !flowBuffer->flows[i].is_exported)
         {
-            flows[flow_count].src_ip = ip_header->ip_src;
-            flows[flow_count].dst_ip = ip_header->ip_dst;
-            flows[flow_count].src_port = ntohs(udp_header->uh_sport);
-            flows[flow_count].dst_port = ntohs(udp_header->uh_dport);
-            flows[flow_count].packet_count = 1;
-            flows[flow_count].protocol = 'U';
-            flows[flow_count].ts_start = pkthdr->ts.tv_sec;
-            flows[flow_count].ts_last = pkthdr->ts.tv_sec;
-            flows[flow_count].tms_start = pkthdr->ts.tv_usec;
-            flows[flow_count].tms_last = pkthdr->ts.tv_usec;
-            flows[flow_count].fwd_tot = 1;
-            flows[flow_count].bwd_tot = 0;
-            printf("timestamp masuknya flow: %ld\n", pkthdr->ts.tv_usec);
-            flow_count++;
+            // flow are exported by timeout
+            printFlowInfo(&flowBuffer->flows[i]);
         }
-        else
-        {
-            printf("Max flow count reached. Cannot add a new flow.\n");
-        }
-    }
-    else
-    {
-        flows[flow_index].packet_count++;
-        flows[flow_index].ts_last = pkthdr->ts.tv_sec;
-        flows[flow_index].tms_last = pkthdr->ts.tv_usec;
     }
 }
 
+    // handling the packet listener
 void packet_handler(unsigned char *user_data, const struct pcap_pkthdr *pkthdr, const unsigned char *packet)
 {
+    // PROTOCOL TCP
+    packet_received++;
     const struct ip *ip_header = (struct ip *)(packet + sizeof(struct ethhdr));
-    //PROTOCOL TCP
     if (ip_header->ip_p == IPPROTO_TCP)
     {
-        tcp_handler(pkthdr, packet);
-        process_packet(packet, 54, pkthdr->len - 54);
-        
-    }
-
-
-    //PROTOCOL UDP
-    else if (ip_header->ip_p == IPPROTO_UDP)
-    {
-        // udp_handler(pkthdr, packet);
-    }
-    packet_count++;
-    printf("\n");
-    pcap_dump((u_char *)pcap_dumper, pkthdr, packet);
-    if (packet_count >= MAX_PACKETS)
-    {
-        pcap_breakloop((pcap_t *)user_data);
+        tcp_handler((FlowsBuffer *)user_data, packet, pkthdr);
+        packet_count++;
     }
 }
 
-/**
- * TODO
- * ? Install zeek flowmeter
-*/
-
-int main(int argc, char **argv)
+void initFlowBuffer(FlowsBuffer *fbs, unsigned int initSize)
 {
-    pcap_t *handle;
-    time_t t = time(NULL);
-    struct tm *tm = localtime(&t);
-    char s[64];
-    size_t ret = strftime(s, sizeof(s), "%Y-%m-%d_%H-%M-%S.pcap", tm);
-    assert(ret);
-    FILE *pcapFile = fopen(s, "wb");
-    fclose(pcapFile);
-    char errbuf[PCAP_ERRBUF_SIZE];
-    cJSON *flowArr = cJSON_CreateArray();
-    handle = pcap_open_live("eth0", BUFSIZ, 1, 1000, errbuf);
-    if (handle == NULL)
+    fbs->flows = (FlowInfo *)malloc(sizeof(FlowInfo) * initSize);
+    if (fbs->flows == NULL)
     {
-        printf("Error opening device: %s\n", errbuf);
-        return 1;
+        free(fbs);
+        perror("error allocating memory\n");
     }
-    pcap_dumper = pcap_dump_open(handle, s);
-    if (pcap_dumper == NULL)
+    fbs->capacity = initSize;
+    fbs->count = 0;
+}
+
+void initQueue(QueueBuffer *q)
+{
+    q->front = q->rear = NULL;
+    q->count = 0;
+}
+
+void enqueue(QueueBuffer *q, FlowInfo *flow)
+{
+    Node *newNode = (Node *)malloc(sizeof(Node));
+    if (!newNode)
     {
-        printf("Error opening pcap file for writing.\n");
-        return 1;
+        printf("Memory allocation failed\n");
+        return;
     }
-    pcap_loop(handle, 0, packet_handler, (unsigned char *)handle);
-    pcap_dump_close(pcap_dumper);
-    pcap_close(handle);
-    for (int k = 0; k < flow_count; k++)
+    reset_flow(flow);
+    newNode->flow = flow;
+    newNode->next = NULL;
+    q->count++;
+
+    if (q->rear == NULL)
     {
-        if (flows[k].protocol == 'T')
-        {
-            tcp_flow += 1;
-        }
-        else
-        {
-            udp_flow += 1;
-        }
-    }
-    // Print flow information
-    for (int i = 0; i < flow_count; i++)
-    {
-        print_flow_info(i);
-        cJSON *tempJson = cJSON_CreateObject();
-        cJSON *tempArr = cJSON_CreateArray();
-        cJSON_AddStringToObject(tempJson, "src_ip", inet_ntoa(flows[i].src_ip));
-        cJSON_AddStringToObject(tempJson, "dst_ip", inet_ntoa(flows[i].dst_ip));
-        cJSON_AddNumberToObject(tempJson, "src_port", flows[i].src_port);
-        cJSON_AddNumberToObject(tempJson, "dst_port", flows[i].dst_port);
-        cJSON_AddNumberToObject(tempJson, "pkt_sum", flows[i].packet_count);
-        cJSON_AddNumberToObject(tempJson, "protocol", flows[i].protocol);
-        cJSON_AddNumberToObject(tempJson, "ts_start", flows[i].ts_start);
-        cJSON_AddNumberToObject(tempJson, "ts_last", flows[i].ts_last);
-        cJSON_AddNumberToObject(tempJson, "tms_start", flows[i].tms_start);
-        cJSON_AddNumberToObject(tempJson, "tms_last", flows[i].tms_last);
-        cJSON_AddNumberToObject(tempJson, "fwd_tot", flows[i].fwd_tot);
-        cJSON_AddNumberToObject(tempJson, "bwd_tot", flows[i].bwd_tot);
-        for (int j = 0; j < sizeof(flows[i].pkt_array)/sizeof(int); j++)
-        {
-            cJSON_AddItemToArray(tempArr, cJSON_CreateNumber(flows[i].pkt_array[j]));
-        }
-        cJSON_AddItemToObject(tempJson, "payload_size_arr", tempArr);
-        cJSON_AddItemToArray(flowArr, tempJson);
-        printf("flow array: %s", cJSON_Print(tempJson));
-        printf("\n");
+        q->front = q->rear = newNode;
+        return;
     }
 
+    q->rear->next = newNode;
+    q->rear = newNode;
+}
 
-    printf("flow array: %s\n", cJSON_Print(flowArr));
-    strftime(s, sizeof(s), "captured_packets/%Y-%m-%d_%H-%M-%S.json", tm);
-    FILE *fp = fopen(s, "w");
-    if(fp == NULL){
-        printf("can't create file");
+FlowInfo *dequeue(QueueBuffer *q)
+{
+    if (q->front == NULL)
+    {
+        return NULL;
     }
-    fputs(cJSON_Print(flowArr), fp);
-    cJSON_Delete(flowArr);
-    fclose;
-    printf("Total UDP Flowss: %d\n", udp_flow);
-    printf("Total TCP Flows: %d\n", tcp_flow);
-    return 0;
+
+    Node *temp = q->front;
+    FlowInfo *value = temp->flow;
+    q->front = q->front->next;
+    q->count--;
+
+    if (q->front == NULL)
+    {
+        q->rear = NULL;
+    }
+
+    free(temp);
+    return value;
+}
+
+FlowInfo *queueSearch(QueueBuffer *q, struct in_addr ip_src, struct in_addr ip_dst, uint16_t src_port, uint16_t dst_port)
+{
+    Node *current = q->front;
+
+    while (current != NULL)
+    {
+        if ((current->flow->src_ip.s_addr == ip_src.s_addr &&
+             current->flow->dst_ip.s_addr == ip_dst.s_addr &&
+             current->flow->src_port == src_port &&
+             current->flow->dst_port == dst_port) ||
+            current->flow->src_ip.s_addr == ip_dst.s_addr &&
+                current->flow->dst_ip.s_addr == ip_src.s_addr &&
+                current->flow->src_port == dst_port &&
+                current->flow->dst_port == src_port)
+        {
+            return current->flow;
+        }
+        current = current->next;
+    }
+    return NULL;
+}
+
+void freeQueue(QueueBuffer *q)
+{
+    Node *current = q->front;
+    Node *next;
+
+    while (current != NULL)
+    {
+        next = current->next;
+        free(current);
+        current = next;
+    }
+    q->front = q->rear = NULL;
+    free(q);
+}
+
+void handle_sigint()
+{
+    for (int i = 0; i < flowBuffer->count; i++)
+    {
+        // checking if the flow already in the queueBuffer
+        FlowInfo *is_queued = queueSearch(queueBuffer, flowBuffer->flows[i].src_ip, flowBuffer->flows[i].dst_ip, flowBuffer->flows[i].src_port, flowBuffer->flows[i].dst_port);
+
+        if (is_queued != NULL)
+            found_in_queue++;
+        // if flow isn't yet stored in the queue buffer, export the flow
+        else if (is_queued == NULL)
+            printFlowInfo(&flowBuffer->flows[i]);
+
+        // free the memory for the dynamic array
+        if (flowBuffer->flows[i].payloads_size != NULL)
+        {
+            free(flowBuffer->flows[i].payloads_size);
+        }
+        if (flowBuffer->flows[i].ts_msec != NULL)
+        {
+            free(flowBuffer->flows[i].ts_msec);
+        }
+        if (flowBuffer->flows[i].ts_sec != NULL)
+        {
+            free(flowBuffer->flows[i].ts_sec);
+        }
+        flow_buffer_count++;
+    }
+
+    // printing captured count
+    printf("packet received(without filter) : %ld\n", packet_received);
+    printf("packet count(tcp filtered): %ld\n", packet_count);
+    printf("packet processed(exported): %ld\n", packet_processed);
+    printf("packet in queue : %d\n", queueBuffer->count);
+    printf("packet in buffer: %d\n", flow_buffer_count);
+    printf("flows count: %d\n", count);
+
+
+    // cleanup
+    freeQueue(queueBuffer);
+    free(flowBuffer->flows);
+    free(flowBuffer);
+    if(fptr != NULL){
+        if (fclose(fptr) != 0)
+        {
+            perror("failed to close the log");
+        }
+    }
+    exit(EXIT_SUCCESS);
 }
