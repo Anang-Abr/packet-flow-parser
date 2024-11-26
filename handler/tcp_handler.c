@@ -122,6 +122,7 @@ void printFlowInfo(FlowInfo *f)
 
         printf( "},\n");
     }
+    f->is_exported = true;
     enqueue(queueBuffer, f);
 }
 
@@ -260,6 +261,8 @@ FlowInfo *tcp_generate_new_flow(
     new_flow->payloads_size[new_flow->packet_count] = payload_size;
     new_flow->fwd++;
     new_flow->packet_count++;
+    new_flow->is_exported = false;
+    new_flow->last_updated = time(NULL);
     new_flow->hasFin = false;
     new_flow->waitACK = false;
     if (new_flow->ts_sec == NULL || new_flow->ts_msec == NULL || new_flow->payloads_size == NULL)
@@ -336,6 +339,8 @@ void tcp_update_flow(
     unsigned int payload_size = ip_hdr->ip_len - ip_hdr_size - tcp_hdr_size;
     bool is_fwd = flow->src_ip.s_addr == ip_hdr->ip_src.s_addr;
     int flow_packet_count = flow->packet_count;
+    flow->is_exported = false;
+    flow->last_updated = time(NULL);
     flow->packet_count++;
     bool exported = false;
     if (flow_packet_count >= flow->capacity)
@@ -576,6 +581,8 @@ void reuse_flow(
     rf->ts_msec[rf->packet_count] = pkthdr->ts.tv_usec;
     rf->payloads_size[rf->packet_count] = payload_size;
     rf->packet_count++;
+    rf->is_exported = false;
+    rf->last_updated = time(NULL);
     rf->hasFin = false;
     rf->waitACK = false;
     if (rf->ts_sec == NULL || rf->ts_msec == NULL || rf->payloads_size == NULL)

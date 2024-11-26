@@ -38,6 +38,8 @@ typedef struct
     int bwd_payload_std;
     long *payloads_size;
     unsigned long capacity;
+    time_t last_updated;
+    bool is_exported;
     bool hasFin;
     bool waitACK;
 } FlowInfo;

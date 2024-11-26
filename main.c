@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdbool.h>
+#include <omp.h>
 #include <pcap.h>
 #include <netinet/ip.h>
 #include <netinet/ether.h>
@@ -11,13 +12,16 @@
 #include "utils/cJSON.h"
 #include "utils/cJSON.c"
 #include <getopt.h>
+#include <time.h>
 #include <signal.h>
+#include <unistd.h>
 #include "flow.h"
 #include "./handler/handler.h"
 #include "main.h"
 
 #define MAX_FLOWS 10
 #define MAX_PACKETS 30
+#define FLOW_TIMEOUT 5
 
 unsigned int flow_count = 0;
 unsigned long packet_count = 0;
@@ -37,6 +41,7 @@ FlowInfo *dequeue(QueueBuffer *q);
 FlowInfo *queueSearch(QueueBuffer *q, struct in_addr ip_src, struct in_addr ip_dst, uint16_t src_port, uint16_t dst_port);
 void freeQueue(QueueBuffer *q);
 void handle_sigint();
+void timeoutCheck(FlowsBuffer *flowBuffer);
 
 unsigned int flow_buffer_count = 0;
 unsigned int found_in_queue = 0;
@@ -56,6 +61,7 @@ int check_interface(const char *interface)
 
 int main(int argc, char *argv[])
 {
+    
     int opt;
     char *interface = NULL;
     char *export_file = NULL;
@@ -109,21 +115,48 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
     }
-    
-
-    handle = pcap_open_live(interface, BUFSIZ*2, 1, 1000, errbuf);
-    if (handle == NULL)
+    #pragma omp parallel sections
     {
-        printf("Error opening device: %s\n", errbuf);
-        return 1;
+        #pragma omp section
+        {
+            while (1)
+            {
+                timeoutCheck(flowBuffer);
+                sleep(1);
+            }
+        }
+
+        #pragma omp section
+        {
+            handle = pcap_open_live(interface, BUFSIZ * 2, 1, 1000, errbuf);
+            if (handle == NULL)
+            {
+                printf("Error opening device: %s\n", errbuf);
+                exit(EXIT_SUCCESS);
+            }
+            pcap_loop(handle, 0, packet_handler, (unsigned char *)flowBuffer);
+            pcap_close(handle);
+            fclose;
+        }
     }
-    pcap_loop(handle, 0, packet_handler, (unsigned char *)flowBuffer);
-    pcap_close(handle);
-    fclose;
     return 0;
 }
 
-// handling the packet listener
+void timeoutCheck(FlowsBuffer *flowBuffer)
+{
+    time_t currentTime = time(NULL);
+    for (int i = 0; i < flowBuffer->count; i++)
+    {
+        double timeDiff = difftime(currentTime, flowBuffer->flows[i].last_updated);
+        if (timeDiff > FLOW_TIMEOUT && !flowBuffer->flows[i].is_exported)
+        {
+            // flow are exported by timeout
+            printFlowInfo(&flowBuffer->flows[i]);
+        }
+    }
+}
+
+    // handling the packet listener
 void packet_handler(unsigned char *user_data, const struct pcap_pkthdr *pkthdr, const unsigned char *packet)
 {
     // PROTOCOL TCP
